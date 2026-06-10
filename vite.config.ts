@@ -15,8 +15,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: '音乐基础训练器',
-        short_name: '音乐训练',
+        name: 'NoteSense 音感训练器',
+        short_name: 'NoteSense',
         description: '音名、唱名、听辨、旋律、和弦与音程速算训练器',
         theme_color: '#1d4ed8',
         background_color: '#f8fafc',

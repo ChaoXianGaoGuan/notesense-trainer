@@ -113,7 +113,7 @@ export function App() {
     <div className="app-shell">
       <header className="topbar">
         <div>
-          <h1>音乐基础训练器</h1>
+          <h1>NoteSense 音感训练器</h1>
           <p>固定唱名、听辨、旋律、和弦和音程速算</p>
         </div>
       </header>
