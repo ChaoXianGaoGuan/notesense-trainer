@@ -38,6 +38,14 @@ https://chaoxiangaoguan.github.io/notesense-trainer/
 - Playwright：端到端测试和响应式布局检查。
 - localStorage：本机设置、统计和错题队列持久化。
 
+## 文档
+
+- [架构说明](docs/architecture.md)：项目分层、数据流、状态和部署形态。
+- [乐理规则](docs/music-theory.md)：音名拼写、大调集合、级数和弦、和弦所属大调规则。
+- [部署说明](docs/deployment.md)：GitHub Pages workflow、常见问题和更新流程。
+- [更新记录](CHANGELOG.md)：版本变化和主要功能记录。
+- [许可证](LICENSE)：项目代码使用 MIT License；内置音频采样见 `public/samples/ATTRIBUTION.md`。
+
 ## 项目结构
 
 ```text
@@ -49,6 +57,7 @@ src/
   state/     # 默认设置、统计、错题队列、localStorage 持久化
   test/      # 测试环境配置
 
+docs/        # 架构、乐理规则、部署说明
 public/
   samples/   # 钢琴和吉他 mp3 采样，随项目发布并支持离线缓存
 
@@ -107,6 +116,8 @@ e2e/         # Playwright 端到端测试
 ```text
 public/samples/ATTRIBUTION.md
 ```
+
+项目源代码使用 MIT License。音频采样是第三方资源，不由项目代码许可证重新授权。
 
 发布到 GitHub Pages 时，Vite 会自动根据仓库名调整资源路径，避免 mp3、manifest 和图标在子路径下加载失败。
 
