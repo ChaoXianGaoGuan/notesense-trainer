@@ -4,7 +4,13 @@ import { recordAnswer, resetStats } from '../state/stats'
 import { addReviewItems, getReviewQueue } from '../state/review'
 import { generateChordQuestion, chordQualitiesForStage } from './chord-quality'
 import { checkDegreeChordAnswer } from './degree-chord'
-import { generateIntervalQuestion, getIntervalCorrectAnswer, getIntervalStatsKey } from './interval-speed'
+import {
+  INTERVAL_SPEED_OPTIONS,
+  generateIntervalQuestion,
+  getIntervalCorrectAnswer,
+  getIntervalStatsKey,
+  type IntervalMode
+} from './interval-speed'
 import { buildMelodyTimedPlayback, generateMelodyQuestion } from './melody'
 import {
   SINGLE_NOTE_RANGES,
@@ -117,6 +123,20 @@ describe('interval trainer', () => {
     expect(generateIntervalQuestion('missing-interval').missing).toBe('interval')
     expect(getIntervalStatsKey(10, 'missing-top')).toBe('interval-speed:10:missing-top')
     expect(getIntervalStatsKey(5, 'mixed')).toBe('interval-speed:5:mixed')
+  })
+
+  it('excludes octave intervals from speed questions and answers', () => {
+    expect(INTERVAL_SPEED_OPTIONS.some((interval) => interval.endsWith('8'))).toBe(false)
+
+    for (const mode of ['missing-top', 'missing-root', 'missing-interval', 'mixed'] as IntervalMode[]) {
+      for (let index = 0; index < 80; index += 1) {
+        const question = generateIntervalQuestion(mode)
+        expect(question.interval.endsWith('8')).toBe(false)
+        if (question.missing === 'interval') {
+          expect(question.answerOptions.some((option) => option.endsWith('8'))).toBe(false)
+        }
+      }
+    }
   })
 })
 

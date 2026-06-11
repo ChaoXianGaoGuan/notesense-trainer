@@ -32,6 +32,9 @@ export type IntervalQuestion = {
 
 export const INTERVAL_TIME_LIMITS: IntervalTimeLimit[] = [5, 10]
 export const INTERVAL_MODES: IntervalMode[] = ['missing-top', 'missing-root', 'missing-interval', 'mixed']
+export const INTERVAL_SPEED_OPTIONS: IntervalName[] = INTERVAL_OPTIONS.filter(
+  (interval) => !interval.endsWith('8')
+)
 
 const MISSING_BY_MODE: Record<Exclude<IntervalMode, 'mixed'>, IntervalMissingPart> = {
   'missing-top': 'top',
@@ -43,7 +46,7 @@ export function generateIntervalQuestion(mode: IntervalMode = 'mixed', context: 
   for (let attempt = 0; attempt < 2000; attempt += 1) {
     const missing = mode === 'mixed' ? randomItem<IntervalMissingPart>(['root', 'top', 'interval']) : MISSING_BY_MODE[mode]
     const root = randomItem(SPELLING_OPTIONS)
-    const interval = randomItem(INTERVAL_OPTIONS)
+    const interval = randomItem(INTERVAL_SPEED_OPTIONS)
 
     let top: SpelledPitch
     try {
@@ -117,7 +120,7 @@ function buildAnswerOptions(
   interval: IntervalName
 ): string[] {
   if (missing === 'interval') {
-    return INTERVAL_OPTIONS
+    return INTERVAL_SPEED_OPTIONS
   }
 
   if (missing === 'top') {

@@ -37,6 +37,7 @@ test('each module renders and supports a basic answer flow', async ({ page }) =>
   await expect(page.getByRole('status')).toBeVisible()
   await page.getByRole('button', { name: '根音冠音音程速算' }).click()
   await page.getByRole('button', { name: '算音程' }).click()
+  await expect(intervalModule.getByRole('button', { name: '8度' })).toHaveCount(0)
   await intervalModule.getByRole('button', { name: '3度' }).click()
   await intervalModule.getByRole('button', { name: '大' }).click()
   await expect(page.getByRole('status')).toBeVisible()

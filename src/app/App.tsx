@@ -91,7 +91,7 @@ const TIMBRES: Array<{ value: Timbre; label: string }> = [
 ]
 
 const INTERVAL_PITCH_ACCIDENTALS: Array<Extract<Accidental, 'b' | '' | '#'>> = ['b', '', '#']
-const INTERVAL_NUMBERS = [2, 3, 4, 5, 6, 7, 8] as const
+const INTERVAL_NUMBERS = [2, 3, 4, 5, 6, 7] as const
 const INTERVAL_QUALITIES = ['d', 'm', 'P', 'M', 'A'] as const
 const INTERVAL_QUALITY_LABELS: Record<(typeof INTERVAL_QUALITIES)[number], string> = {
   d: '减',
@@ -1383,5 +1383,5 @@ function isValidIntervalQuality(
   number: (typeof INTERVAL_NUMBERS)[number],
   quality: (typeof INTERVAL_QUALITIES)[number]
 ): boolean {
-  return [4, 5, 8].includes(number) ? ['d', 'P', 'A'].includes(quality) : ['d', 'm', 'M', 'A'].includes(quality)
+  return [4, 5].includes(number) ? ['d', 'P', 'A'].includes(quality) : ['d', 'm', 'M', 'A'].includes(quality)
 }
