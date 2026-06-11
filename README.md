@@ -40,11 +40,15 @@ https://chaoxiangaoguan.github.io/notesense-trainer/
 
 ## 文档
 
+- [AI 接手指南](AGENTS.md)：给后续 AI 智能体的项目边界、修改规则和测试要求。
+- [项目交接文档](docs/project-handoff.md)：当前状态、关键决策、已踩坑和后续优化方向。
 - [架构说明](docs/architecture.md)：项目分层、数据流、状态和部署形态。
 - [乐理规则](docs/music-theory.md)：音名拼写、大调集合、级数和弦、和弦所属大调规则。
 - [部署说明](docs/deployment.md)：GitHub Pages workflow、常见问题和更新流程。
 - [更新记录](CHANGELOG.md)：版本变化和主要功能记录。
 - [许可证](LICENSE)：项目代码使用 MIT License；内置音频采样见 `public/samples/ATTRIBUTION.md`。
+
+如果你是新的 AI 智能体或第一次接手本项目，建议先阅读 `AGENTS.md` 和 `docs/project-handoff.md`。
 
 ## 项目结构
 
