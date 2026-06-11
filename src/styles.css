@@ -89,7 +89,9 @@ button:disabled {
 }
 
 .module-tabs button.active,
-.segmented-control button.active {
+.segmented-control button.active,
+.picker-row button.active,
+.major-key-options button.active {
   border-color: #1d4ed8;
   background: #1d4ed8;
   color: #fff;
@@ -366,6 +368,30 @@ button.primary {
   gap: 12px;
 }
 
+.picker-rows,
+.major-key-options {
+  display: grid;
+  gap: 12px;
+}
+
+.picker-row {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.picker-row > span {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.picker-row > div {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 8px;
+}
+
 .option-group {
   display: grid;
   grid-template-columns: 48px 1fr;
@@ -381,6 +407,10 @@ button.primary {
 
 .interval-options.grouped .option-group > div {
   grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+}
+
+.major-key-options .option-group > div {
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
 }
 
 .option-group button {
@@ -455,6 +485,11 @@ button.primary {
   }
 
   .option-group {
+    grid-template-columns: 42px 1fr;
+    gap: 8px;
+  }
+
+  .picker-row {
     grid-template-columns: 42px 1fr;
     gap: 8px;
   }

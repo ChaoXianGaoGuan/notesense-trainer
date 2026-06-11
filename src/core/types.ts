@@ -31,7 +31,9 @@ export type StatsKey =
   | `single-note:${1 | 2 | 3}`
   | `melody:${2 | 3 | 4 | 5}`
   | `chord-quality:${1 | 2 | 3 | 4}`
-  | `interval-speed:${5 | 10}`
+  | `interval-speed:${5 | 10}:${'missing-top' | 'missing-root' | 'missing-interval' | 'mixed'}`
+  | 'degree-chord'
+  | 'triad-key-match'
 
 export type GenerationContext = {
   previousQuestionKey?: string

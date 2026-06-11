@@ -3,8 +3,9 @@ import type { Dispatch, MutableRefObject, ReactNode, SetStateAction } from 'reac
 import { audioEngine } from '../audio/engine'
 import { CHORD_LABELS } from '../core/chords'
 import { INTERVAL_LABELS, type IntervalName } from '../core/intervals'
+import { DEGREE_ROMANS, getMajorKeyGroups, type MajorKey } from '../core/major-keys'
 import { SOLFEGE_OPTIONS, solfegeToOctavePitch } from '../core/notes'
-import type { AnswerResult, AudioSettings, NaturalNote, Solfege, StatsKey, Timbre } from '../core/types'
+import type { Accidental, AnswerResult, AudioSettings, NaturalNote, Solfege, StatsKey, Timbre } from '../core/types'
 import {
   checkChordAnswer,
   chordQualitiesForStage,
@@ -14,11 +15,22 @@ import {
   type ChordStage
 } from '../modules/chord-quality'
 import {
+  DEGREE_CHORD_ACCIDENTALS,
+  DEGREE_CHORD_QUALITIES,
+  checkDegreeChordAnswer,
+  degreeChordQuestionKey,
+  generateDegreeChordQuestion,
+  getDegreeChordStatsKey,
+  type DegreeChordAnswer,
+  type DegreeChordQuestion
+} from '../modules/degree-chord'
+import {
   generateIntervalQuestion,
   getIntervalCorrectAnswer,
   getIntervalStatsKey,
   intervalQuestionKey,
   checkIntervalAnswer,
+  type IntervalMode,
   type IntervalQuestion
 } from '../modules/interval-speed'
 import {
@@ -49,6 +61,14 @@ import {
   solfegeOptions,
   type SolfegeQuestion
 } from '../modules/solfege'
+import {
+  NO_MATCHING_MAJOR_KEY,
+  checkTriadKeyMatchAnswer,
+  generateTriadKeyMatchQuestion,
+  getTriadKeyMatchStatsKey,
+  triadKeyMatchQuestionKey,
+  type TriadKeyMatchQuestion
+} from '../modules/triad-key-match'
 import { DEFAULT_PREFERENCES, normalizePreferences, type AppPreferences, type ModuleId } from '../state/defaults'
 import { addReviewItems, getReviewQueue, type ReviewQueues } from '../state/review'
 import { accuracy, getStats, recordAnswer, resetStats, type StatsState } from '../state/stats'
@@ -60,7 +80,9 @@ const MODULES: Array<{ id: ModuleId; label: string }> = [
   { id: 'single-note', label: '单音听辨' },
   { id: 'melody', label: '旋律短句听写' },
   { id: 'chord-quality', label: '和弦性质听辨' },
-  { id: 'interval-speed', label: '根音冠音音程速算' }
+  { id: 'interval-speed', label: '根音冠音音程速算' },
+  { id: 'degree-chord', label: '调内级数和弦' },
+  { id: 'triad-key-match', label: '和弦所属大调' }
 ]
 
 const TIMBRES: Array<{ value: Timbre; label: string }> = [
@@ -131,7 +153,7 @@ export function App() {
         ))}
       </nav>
 
-      {preferences.activeModule !== 'interval-speed' && (
+      {!['interval-speed', 'degree-chord', 'triad-key-match'].includes(preferences.activeModule) && (
         <AudioControls settings={preferences.audio} onChange={updateAudio} />
       )}
 
@@ -188,6 +210,14 @@ export function App() {
             recordAnswer={recordModuleAnswer}
             resetStats={resetModuleStats}
           />
+        )}
+
+        {preferences.activeModule === 'degree-chord' && (
+          <DegreeChordTrainer stats={stats} recordAnswer={recordModuleAnswer} resetStats={resetModuleStats} />
+        )}
+
+        {preferences.activeModule === 'triad-key-match' && (
+          <TriadKeyMatchTrainer stats={stats} recordAnswer={recordModuleAnswer} resetStats={resetModuleStats} />
         )}
       </main>
     </div>
@@ -725,8 +755,8 @@ function IntervalTrainer({
   recordAnswer: (key: StatsKey, correct: boolean) => void
   resetStats: (key: StatsKey) => void
 }) {
-  const statsKey = getIntervalStatsKey(settings.timeLimit)
-  const [question, setQuestion] = useState<IntervalQuestion>(() => generateIntervalQuestion())
+  const statsKey = getIntervalStatsKey(settings.timeLimit, settings.mode)
+  const [question, setQuestion] = useState<IntervalQuestion>(() => generateIntervalQuestion(settings.mode))
   const [feedback, setFeedback] = useState<AnswerResult | null>(null)
   const [remaining, setRemaining] = useState<number>(settings.timeLimit)
   const lockedRef = useRef(false)
@@ -735,10 +765,10 @@ function IntervalTrainer({
   const nextQuestion = useCallback(() => {
     clearPendingTimeout(timeoutRef)
     lockedRef.current = false
-    setQuestion((current) => generateIntervalQuestion({ previousQuestionKey: intervalQuestionKey(current) }))
+    setQuestion((current) => generateIntervalQuestion(settings.mode, { previousQuestionKey: intervalQuestionKey(current) }))
     setFeedback(null)
     setRemaining(settings.timeLimit)
-  }, [settings.timeLimit])
+  }, [settings.mode, settings.timeLimit])
 
   const finish = useCallback(
     (answer: string, timedOut = false) => {
@@ -781,7 +811,7 @@ function IntervalTrainer({
       window.clearInterval(timer)
       clearPendingTimeout(timeoutRef)
     }
-  }, [finish, question.id, settings.timeLimit])
+  }, [finish, question.id, settings.mode, settings.timeLimit])
 
   useHotkeys(
     useMemo(
@@ -811,7 +841,18 @@ function IntervalTrainer({
             { value: '5', label: '5 秒' },
             { value: '10', label: '10 秒' }
           ]}
-          onChange={(value) => updateSettings({ timeLimit: Number(value) as AppPreferences['interval']['timeLimit'] })}
+          onChange={(value) => updateSettings({ ...settings, timeLimit: Number(value) as AppPreferences['interval']['timeLimit'] })}
+        />
+        <SegmentedControl
+          label="模式"
+          value={settings.mode}
+          options={[
+            { value: 'missing-top', label: '算冠音' },
+            { value: 'missing-root', label: '算根音' },
+            { value: 'missing-interval', label: '算音程' },
+            { value: 'mixed', label: '混合' }
+          ]}
+          onChange={(value) => updateSettings({ ...settings, mode: value as IntervalMode })}
         />
       </div>
       <div className="timer-row">
@@ -848,10 +889,246 @@ function IntervalTrainer({
   )
 }
 
+function DegreeChordTrainer({
+  stats,
+  recordAnswer: record,
+  resetStats: reset
+}: {
+  stats: StatsState
+  recordAnswer: (key: StatsKey, correct: boolean) => void
+  resetStats: (key: StatsKey) => void
+}) {
+  const statsKey = getDegreeChordStatsKey()
+  const [question, setQuestion] = useState<DegreeChordQuestion>(() => generateDegreeChordQuestion())
+  const [answer, setAnswer] = useState<Partial<DegreeChordAnswer>>({})
+  const [feedback, setFeedback] = useState<AnswerResult | null>(null)
+  const timeoutRef = useRef<number | null>(null)
+
+  const nextQuestion = useCallback(() => {
+    clearPendingTimeout(timeoutRef)
+    setQuestion((current) => generateDegreeChordQuestion({ previousQuestionKey: degreeChordQuestionKey(current) }))
+    setAnswer({})
+    setFeedback(null)
+  }, [])
+
+  const submit = useCallback(() => {
+    if (feedback || !answer.letter || answer.accidental === undefined || !answer.quality) return
+    const result = checkDegreeChordAnswer(question, answer as DegreeChordAnswer)
+    setFeedback(result)
+    record(statsKey, result.correct)
+    if (result.correct) {
+      timeoutRef.current = window.setTimeout(nextQuestion, 560)
+    }
+  }, [answer, feedback, nextQuestion, question, record, statsKey])
+
+  useEffect(() => () => clearPendingTimeout(timeoutRef), [])
+
+  useHotkeys(
+    useMemo(
+      () => ({
+        onSpace: () => {
+          if (feedback && !feedback.correct) nextQuestion()
+        },
+        onReset: () => reset(statsKey)
+      }),
+      [feedback, nextQuestion, reset, statsKey]
+    )
+  )
+
+  const canSubmit = Boolean(answer.letter && answer.accidental !== undefined && answer.quality && !feedback)
+
+  return (
+    <section className="module-panel" data-testid="module-degree-chord">
+      <ModuleHeader title="调内级数和弦" />
+      <div className="question-display compact">
+        <span className="question-label">题目</span>
+        <strong>
+          {question.key} 大调 · {question.degree}级 {DEGREE_ROMANS[question.degree]}
+        </strong>
+      </div>
+      <PickerRows>
+        <PickerRow label="根音">
+          {(['C', 'D', 'E', 'F', 'G', 'A', 'B'] as NaturalNote[]).map((letter) => (
+            <button
+              key={letter}
+              type="button"
+              className={answer.letter === letter ? 'active' : ''}
+              disabled={Boolean(feedback)}
+              onClick={() => setAnswer((current) => ({ ...current, letter }))}
+            >
+              {letter}
+            </button>
+          ))}
+        </PickerRow>
+        <PickerRow label="升降">
+          {DEGREE_CHORD_ACCIDENTALS.map((accidental) => (
+            <button
+              key={accidental || 'natural'}
+              type="button"
+              className={answer.accidental === accidental ? 'active' : ''}
+              disabled={Boolean(feedback)}
+              onClick={() => setAnswer((current) => ({ ...current, accidental }))}
+            >
+              {formatAccidental(accidental)}
+            </button>
+          ))}
+        </PickerRow>
+        <PickerRow label="类型">
+          {DEGREE_CHORD_QUALITIES.map((quality) => (
+            <button
+              key={quality}
+              type="button"
+              className={answer.quality === quality ? 'active' : ''}
+              disabled={Boolean(feedback)}
+              onClick={() => setAnswer((current) => ({ ...current, quality }))}
+            >
+              {CHORD_LABELS[quality]}
+            </button>
+          ))}
+        </PickerRow>
+      </PickerRows>
+      <div className="primary-actions">
+        <button type="button" className="primary" disabled={!canSubmit} onClick={submit}>
+          提交
+        </button>
+      </div>
+      <FeedbackPanel feedback={feedback} onNext={nextQuestion} />
+      <StatsPanel stats={getStats(stats, statsKey)} onReset={() => reset(statsKey)} />
+    </section>
+  )
+}
+
+function TriadKeyMatchTrainer({
+  stats,
+  recordAnswer: record,
+  resetStats: reset
+}: {
+  stats: StatsState
+  recordAnswer: (key: StatsKey, correct: boolean) => void
+  resetStats: (key: StatsKey) => void
+}) {
+  const statsKey = getTriadKeyMatchStatsKey()
+  const [question, setQuestion] = useState<TriadKeyMatchQuestion>(() => generateTriadKeyMatchQuestion())
+  const [selectedKeys, setSelectedKeys] = useState<MajorKey[]>([])
+  const [noneSelected, setNoneSelected] = useState(false)
+  const [feedback, setFeedback] = useState<AnswerResult | null>(null)
+  const timeoutRef = useRef<number | null>(null)
+
+  const nextQuestion = useCallback(() => {
+    clearPendingTimeout(timeoutRef)
+    setQuestion((current) => generateTriadKeyMatchQuestion({ previousQuestionKey: triadKeyMatchQuestionKey(current) }))
+    setSelectedKeys([])
+    setNoneSelected(false)
+    setFeedback(null)
+  }, [])
+
+  const toggleKey = useCallback(
+    (key: MajorKey) => {
+      if (feedback) return
+      setNoneSelected(false)
+      setSelectedKeys((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]))
+    },
+    [feedback]
+  )
+
+  const toggleNone = useCallback(() => {
+    if (feedback) return
+    setSelectedKeys([])
+    setNoneSelected((current) => !current)
+  }, [feedback])
+
+  const submit = useCallback(() => {
+    if (feedback) return
+    const result = checkTriadKeyMatchAnswer(question, noneSelected ? NO_MATCHING_MAJOR_KEY : selectedKeys)
+    setFeedback(result)
+    record(statsKey, result.correct)
+    if (result.correct) {
+      timeoutRef.current = window.setTimeout(nextQuestion, 560)
+    }
+  }, [feedback, nextQuestion, noneSelected, question, record, selectedKeys, statsKey])
+
+  useEffect(() => () => clearPendingTimeout(timeoutRef), [])
+
+  useHotkeys(
+    useMemo(
+      () => ({
+        onSpace: () => {
+          if (feedback && !feedback.correct) nextQuestion()
+        },
+        onReset: () => reset(statsKey)
+      }),
+      [feedback, nextQuestion, reset, statsKey]
+    )
+  )
+
+  return (
+    <section className="module-panel" data-testid="module-triad-key-match">
+      <ModuleHeader title="和弦所属大调" />
+      <div className="question-display">
+        <span className="question-label">三和弦</span>
+        <strong>{question.notes.join(' ')}</strong>
+      </div>
+      <div className="major-key-options">
+        {getMajorKeyGroups().map((group) => (
+          <div key={group.label} className="option-group">
+            <span>{group.label}</span>
+            <div>
+              {group.keys.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={selectedKeys.includes(key) ? 'active' : ''}
+                  disabled={Boolean(feedback)}
+                  onClick={() => toggleKey(key)}
+                >
+                  {key} 大调
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+        <div className="option-group">
+          <span>无</span>
+          <div>
+            <button
+              type="button"
+              className={noneSelected ? 'active' : ''}
+              disabled={Boolean(feedback)}
+              onClick={toggleNone}
+            >
+              无符合大调
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="primary-actions">
+        <button type="button" className="primary" disabled={Boolean(feedback)} onClick={submit}>
+          提交
+        </button>
+      </div>
+      <FeedbackPanel feedback={feedback} onNext={nextQuestion} />
+      <StatsPanel stats={getStats(stats, statsKey)} onReset={() => reset(statsKey)} />
+    </section>
+  )
+}
+
 function ModuleHeader({ title }: { title: string }) {
   return (
     <div className="module-header">
       <h2>{title}</h2>
+    </div>
+  )
+}
+
+function PickerRows({ children }: { children: ReactNode }) {
+  return <div className="picker-rows">{children}</div>
+}
+
+function PickerRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="picker-row">
+      <span>{label}</span>
+      <div>{children}</div>
     </div>
   )
 }
@@ -990,4 +1267,10 @@ function clearPendingTimeout(timeoutRef: MutableRefObject<number | null>): void 
 
 function formatAnswer(answer: string | string[]): string {
   return Array.isArray(answer) ? answer.join(' ') : answer
+}
+
+function formatAccidental(accidental: Extract<Accidental, 'b' | '' | '#'>): string {
+  if (accidental === 'b') return '♭'
+  if (accidental === '#') return '♯'
+  return '♮'
 }

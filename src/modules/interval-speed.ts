@@ -14,9 +14,11 @@ import type { AnswerResult, GenerationContext, SpelledPitch, StatsKey } from '..
 
 export type IntervalTimeLimit = 5 | 10
 export type IntervalMissingPart = 'root' | 'top' | 'interval'
+export type IntervalMode = 'missing-top' | 'missing-root' | 'missing-interval' | 'mixed'
 
 export type IntervalSettings = {
   timeLimit: IntervalTimeLimit
+  mode: IntervalMode
 }
 
 export type IntervalQuestion = {
@@ -29,10 +31,17 @@ export type IntervalQuestion = {
 }
 
 export const INTERVAL_TIME_LIMITS: IntervalTimeLimit[] = [5, 10]
+export const INTERVAL_MODES: IntervalMode[] = ['missing-top', 'missing-root', 'missing-interval', 'mixed']
 
-export function generateIntervalQuestion(context: GenerationContext = {}): IntervalQuestion {
+const MISSING_BY_MODE: Record<Exclude<IntervalMode, 'mixed'>, IntervalMissingPart> = {
+  'missing-top': 'top',
+  'missing-root': 'root',
+  'missing-interval': 'interval'
+}
+
+export function generateIntervalQuestion(mode: IntervalMode = 'mixed', context: GenerationContext = {}): IntervalQuestion {
   for (let attempt = 0; attempt < 2000; attempt += 1) {
-    const missing = randomItem<IntervalMissingPart>(['root', 'top', 'interval'])
+    const missing = mode === 'mixed' ? randomItem<IntervalMissingPart>(['root', 'top', 'interval']) : MISSING_BY_MODE[mode]
     const root = randomItem(SPELLING_OPTIONS)
     const interval = randomItem(INTERVAL_OPTIONS)
 
@@ -91,8 +100,8 @@ export function getIntervalCorrectAnswer(question: IntervalQuestion): string {
   return question.interval
 }
 
-export function getIntervalStatsKey(timeLimit: IntervalTimeLimit): StatsKey {
-  return `interval-speed:${timeLimit}`
+export function getIntervalStatsKey(timeLimit: IntervalTimeLimit, mode: IntervalMode): StatsKey {
+  return `interval-speed:${timeLimit}:${mode}`
 }
 
 export function intervalQuestionKey(

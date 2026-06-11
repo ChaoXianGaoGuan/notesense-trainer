@@ -1,10 +1,17 @@
 import type { AudioSettings, Stats } from '../core/types'
 import type { ChordStage } from '../modules/chord-quality'
-import type { IntervalTimeLimit } from '../modules/interval-speed'
+import type { IntervalMode, IntervalTimeLimit } from '../modules/interval-speed'
 import type { MelodyLength, MelodyPlaybackMode } from '../modules/melody'
 import type { ListenPlaybackMode, SingleNoteDifficulty } from '../modules/single-note'
 
-export type ModuleId = 'solfege' | 'single-note' | 'melody' | 'chord-quality' | 'interval-speed'
+export type ModuleId =
+  | 'solfege'
+  | 'single-note'
+  | 'melody'
+  | 'chord-quality'
+  | 'interval-speed'
+  | 'degree-chord'
+  | 'triad-key-match'
 
 export type AppPreferences = {
   activeModule: ModuleId
@@ -23,6 +30,7 @@ export type AppPreferences = {
   }
   interval: {
     timeLimit: IntervalTimeLimit
+    mode: IntervalMode
   }
 }
 
@@ -52,7 +60,8 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
     stage: 1
   },
   interval: {
-    timeLimit: 10
+    timeLimit: 10,
+    mode: 'missing-top'
   }
 }
 
@@ -62,10 +71,35 @@ export function isSupportedTimbre(value: unknown): value is AudioSettings['timbr
 
 export function normalizePreferences(preferences: AppPreferences): AppPreferences {
   return {
+    ...DEFAULT_PREFERENCES,
     ...preferences,
     audio: {
+      ...DEFAULT_PREFERENCES.audio,
       ...preferences.audio,
-      timbre: isSupportedTimbre(preferences.audio.timbre) ? preferences.audio.timbre : 'piano'
+      timbre: isSupportedTimbre(preferences.audio?.timbre) ? preferences.audio.timbre : 'piano'
+    },
+    singleNote: {
+      ...DEFAULT_PREFERENCES.singleNote,
+      ...preferences.singleNote
+    },
+    melody: {
+      ...DEFAULT_PREFERENCES.melody,
+      ...preferences.melody
+    },
+    chord: {
+      ...DEFAULT_PREFERENCES.chord,
+      ...preferences.chord
+    },
+    interval: {
+      ...DEFAULT_PREFERENCES.interval,
+      ...preferences.interval,
+      mode: isSupportedIntervalMode(preferences.interval?.mode)
+        ? preferences.interval.mode
+        : DEFAULT_PREFERENCES.interval.mode
     }
   }
+}
+
+function isSupportedIntervalMode(value: unknown): value is IntervalMode {
+  return value === 'missing-top' || value === 'missing-root' || value === 'missing-interval' || value === 'mixed'
 }

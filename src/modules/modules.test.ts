@@ -1,8 +1,10 @@
+import { buildDegreeChord, buildMajorScale, findMajorKeysForTriad } from '../core/major-keys'
 import { getNaturalNoteFromPitch } from '../core/notes'
 import { recordAnswer, resetStats } from '../state/stats'
 import { addReviewItems, getReviewQueue } from '../state/review'
 import { generateChordQuestion, chordQualitiesForStage } from './chord-quality'
-import { generateIntervalQuestion, getIntervalCorrectAnswer } from './interval-speed'
+import { checkDegreeChordAnswer } from './degree-chord'
+import { generateIntervalQuestion, getIntervalCorrectAnswer, getIntervalStatsKey } from './interval-speed'
 import { buildMelodyTimedPlayback, generateMelodyQuestion } from './melody'
 import {
   SINGLE_NOTE_RANGES,
@@ -14,6 +16,11 @@ import {
   generateListenQuestion,
   getSingleNoteStatsKey
 } from './single-note'
+import {
+  NO_MATCHING_MAJOR_KEY,
+  checkTriadKeyMatchAnswer,
+  findNoMatchTriadQuestion
+} from './triad-key-match'
 
 describe('single-note trainer', () => {
   it('generates targets inside the selected difficulty', () => {
@@ -99,9 +106,69 @@ describe('chord trainer', () => {
 describe('interval trainer', () => {
   it('generates reversible questions with a present correct answer', () => {
     for (let index = 0; index < 80; index += 1) {
-      const question = generateIntervalQuestion()
+      const question = generateIntervalQuestion('mixed')
       expect(question.answerOptions).toContain(getIntervalCorrectAnswer(question))
     }
+  })
+
+  it('honors fixed missing-part modes and separates stats by mode', () => {
+    expect(generateIntervalQuestion('missing-top').missing).toBe('top')
+    expect(generateIntervalQuestion('missing-root').missing).toBe('root')
+    expect(generateIntervalQuestion('missing-interval').missing).toBe('interval')
+    expect(getIntervalStatsKey(10, 'missing-top')).toBe('interval-speed:10:missing-top')
+    expect(getIntervalStatsKey(5, 'mixed')).toBe('interval-speed:5:mixed')
+  })
+})
+
+describe('major key theory', () => {
+  it('spells traditional major scales', () => {
+    expect(buildMajorScale('C#').notes).toEqual(['C#', 'D#', 'E#', 'F#', 'G#', 'A#', 'B#'])
+    expect(buildMajorScale('Cb').notes).toEqual(['Cb', 'Db', 'Eb', 'Fb', 'Gb', 'Ab', 'Bb'])
+    expect(buildMajorScale('F#').notes).toEqual(['F#', 'G#', 'A#', 'B', 'C#', 'D#', 'E#'])
+    expect(buildMajorScale('Gb').notes).toEqual(['Gb', 'Ab', 'Bb', 'Cb', 'Db', 'Eb', 'F'])
+  })
+
+  it('builds diatonic triads by degree', () => {
+    const dThird = buildDegreeChord('D', 3)
+    expect(dThird.notes).toEqual(['F#', 'A', 'C#'])
+    expect(dThird.quality).toBe('minor')
+
+    const cbSeventh = buildDegreeChord('Cb', 7)
+    expect(cbSeventh.notes).toEqual(['Bb', 'Db', 'Fb'])
+    expect(cbSeventh.quality).toBe('diminished')
+  })
+
+  it('checks degree chord answers as root spelling plus quality', () => {
+    const question = {
+      id: 'q',
+      key: 'D',
+      degree: 3,
+      chord: buildDegreeChord('D', 3)
+    } as const
+
+    expect(checkDegreeChordAnswer(question, { letter: 'F', accidental: '#', quality: 'minor' }).correct).toBe(true)
+    expect(checkDegreeChordAnswer(question, { letter: 'F', accidental: '', quality: 'minor' }).correct).toBe(false)
+  })
+
+  it('matches triads to major keys by complete selected set', () => {
+    const matchingKeys = findMajorKeysForTriad(['D', 'F', 'A'])
+    const question = {
+      id: 'q',
+      root: 'D',
+      quality: 'minor',
+      notes: ['D', 'F', 'A'],
+      matchingKeys
+    } as const
+
+    expect(matchingKeys).toContain('C')
+    expect(checkTriadKeyMatchAnswer(question, matchingKeys).correct).toBe(true)
+    expect(checkTriadKeyMatchAnswer(question, matchingKeys.slice(1)).correct).toBe(false)
+  })
+
+  it('supports no matching major key as a mutually exclusive answer', () => {
+    const question = findNoMatchTriadQuestion()
+    expect(question.matchingKeys).toEqual([])
+    expect(checkTriadKeyMatchAnswer(question, NO_MATCHING_MAJOR_KEY).correct).toBe(true)
   })
 })
 
