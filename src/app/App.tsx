@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Dispatch, MutableRefObject, ReactNode, SetStateAction } from 'react'
 import { audioEngine } from '../audio/engine'
 import { CHORD_LABELS } from '../core/chords'
-import { INTERVAL_LABELS, type IntervalName } from '../core/intervals'
+import { INTERVAL_LABELS } from '../core/intervals'
 import { DEGREE_ROMANS, getMajorKeyGroups, type MajorKey } from '../core/major-keys'
 import { SOLFEGE_OPTIONS, solfegeToOctavePitch } from '../core/notes'
 import type { Accidental, AnswerResult, AudioSettings, NaturalNote, Solfege, StatsKey, Timbre } from '../core/types'
@@ -91,6 +91,15 @@ const TIMBRES: Array<{ value: Timbre; label: string }> = [
 ]
 
 const INTERVAL_PITCH_ACCIDENTALS: Array<Extract<Accidental, 'b' | '' | '#'>> = ['b', '', '#']
+const INTERVAL_NUMBERS = [2, 3, 4, 5, 6, 7, 8] as const
+const INTERVAL_QUALITIES = ['d', 'm', 'P', 'M', 'A'] as const
+const INTERVAL_QUALITY_LABELS: Record<(typeof INTERVAL_QUALITIES)[number], string> = {
+  d: '减',
+  m: '小',
+  P: '纯',
+  M: '大',
+  A: '增'
+}
 
 export function App() {
   const [preferences, setPreferences] = usePersistentState<AppPreferences>(
@@ -764,6 +773,10 @@ function IntervalTrainer({
     letter?: NaturalNote
     accidental?: Extract<Accidental, 'b' | '' | '#'>
   }>({})
+  const [intervalAnswer, setIntervalAnswer] = useState<{
+    number?: (typeof INTERVAL_NUMBERS)[number]
+    quality?: (typeof INTERVAL_QUALITIES)[number]
+  }>({})
   const [remaining, setRemaining] = useState<number>(settings.timeLimit)
   const lockedRef = useRef(false)
   const timeoutRef = useRef<number | null>(null)
@@ -774,6 +787,7 @@ function IntervalTrainer({
     setQuestion((current) => generateIntervalQuestion(settings.mode, { previousQuestionKey: intervalQuestionKey(current) }))
     setFeedback(null)
     setPitchAnswer({})
+    setIntervalAnswer({})
     setRemaining(settings.timeLimit)
   }, [settings.mode, settings.timeLimit])
 
@@ -814,10 +828,39 @@ function IntervalTrainer({
     [feedback, finish, question.missing]
   )
 
+  const updateIntervalAnswer = useCallback(
+    (partial: { number?: (typeof INTERVAL_NUMBERS)[number]; quality?: (typeof INTERVAL_QUALITIES)[number] }) => {
+      if (feedback || question.missing !== 'interval') return
+
+      setIntervalAnswer((current) => {
+        const next = { ...current, ...partial }
+        if (next.number && next.quality && !isValidIntervalQuality(next.number, next.quality)) {
+          next.quality = undefined
+        }
+        if (next.number && next.quality) {
+          window.setTimeout(() => finish(`${next.quality}${next.number}`), 0)
+        }
+        return next
+      })
+    },
+    [feedback, finish, question.missing]
+  )
+
+  useEffect(() => {
+    lockedRef.current = false
+    clearPendingTimeout(timeoutRef)
+    setQuestion(generateIntervalQuestion(settings.mode))
+    setFeedback(null)
+    setPitchAnswer({})
+    setIntervalAnswer({})
+    setRemaining(settings.timeLimit)
+  }, [settings.mode])
+
   useEffect(() => {
     lockedRef.current = false
     setFeedback(null)
     setPitchAnswer({})
+    setIntervalAnswer({})
     setRemaining(settings.timeLimit)
     const deadline = Date.now() + settings.timeLimit * 1000
     const timer = window.setInterval(() => {
@@ -847,8 +890,6 @@ function IntervalTrainer({
       [feedback, nextQuestion, reset, statsKey]
     )
   )
-
-  const optionGroups = question.missing === 'interval' ? groupIntervals(question.answerOptions as IntervalName[]) : []
 
   return (
     <section className="module-panel" data-testid="module-interval">
@@ -890,20 +931,39 @@ function IntervalTrainer({
         />
       </div>
       {question.missing === 'interval' ? (
-        <div className="interval-options grouped">
-          {optionGroups.map((group) => (
-            <div key={group.label} className="option-group">
-              <span>{group.label}</span>
-              <div>
-                {group.options.map((option) => (
-                  <button key={option} type="button" disabled={Boolean(feedback)} onClick={() => finish(option)}>
-                    {INTERVAL_LABELS[option as IntervalName]}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+        <PickerRows>
+          <PickerRow label="度数">
+            {INTERVAL_NUMBERS.map((number) => (
+              <button
+                key={number}
+                type="button"
+                className={intervalAnswer.number === number ? 'active' : ''}
+                disabled={Boolean(feedback)}
+                onClick={() => updateIntervalAnswer({ number })}
+              >
+                {number}度
+              </button>
+            ))}
+          </PickerRow>
+          <PickerRow label="性质">
+            {INTERVAL_QUALITIES.map((quality) => {
+              const disabled =
+                Boolean(feedback) ||
+                (intervalAnswer.number !== undefined && !isValidIntervalQuality(intervalAnswer.number, quality))
+              return (
+                <button
+                  key={quality}
+                  type="button"
+                  className={intervalAnswer.quality === quality ? 'active' : ''}
+                  disabled={disabled}
+                  onClick={() => updateIntervalAnswer({ quality })}
+                >
+                  {INTERVAL_QUALITY_LABELS[quality]}
+                </button>
+              )
+            })}
+          </PickerRow>
+        </PickerRows>
       ) : (
         <PickerRows>
           <PickerRow label="音名">
@@ -1261,13 +1321,6 @@ function PromptField({ label, value }: { label: string; value: string }) {
   )
 }
 
-function groupIntervals(options: IntervalName[]): Array<{ label: string; options: IntervalName[] }> {
-  return [2, 3, 4, 5, 6, 7, 8].map((number) => ({
-    label: `${number}度`,
-    options: options.filter((option) => option.endsWith(String(number)))
-  }))
-}
-
 function useHotkeys(handlers: {
   onNumber?: (index: number) => void
   onSpace?: () => void
@@ -1324,4 +1377,11 @@ function formatAccidental(accidental: Extract<Accidental, 'b' | '' | '#'>): stri
   if (accidental === 'b') return '♭'
   if (accidental === '#') return '♯'
   return '♮'
+}
+
+function isValidIntervalQuality(
+  number: (typeof INTERVAL_NUMBERS)[number],
+  quality: (typeof INTERVAL_QUALITIES)[number]
+): boolean {
+  return [4, 5, 8].includes(number) ? ['d', 'P', 'A'].includes(quality) : ['d', 'm', 'M', 'A'].includes(quality)
 }

@@ -35,6 +35,11 @@ test('each module renders and supports a basic answer flow', async ({ page }) =>
   await intervalModule.getByRole('button', { name: 'C' }).click()
   await intervalModule.getByRole('button', { name: '♮' }).click()
   await expect(page.getByRole('status')).toBeVisible()
+  await page.getByRole('button', { name: '根音冠音音程速算' }).click()
+  await page.getByRole('button', { name: '算音程' }).click()
+  await intervalModule.getByRole('button', { name: '3度' }).click()
+  await intervalModule.getByRole('button', { name: '大' }).click()
+  await expect(page.getByRole('status')).toBeVisible()
   await page.getByRole('button', { name: '混合' }).click()
   await expect(page.getByTestId('module-interval')).toBeVisible()
 
