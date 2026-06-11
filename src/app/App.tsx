@@ -90,6 +90,8 @@ const TIMBRES: Array<{ value: Timbre; label: string }> = [
   { value: 'guitar', label: '吉他' }
 ]
 
+const INTERVAL_PITCH_ACCIDENTALS: Array<Extract<Accidental, 'b' | '' | '#'>> = ['b', '', '#']
+
 export function App() {
   const [preferences, setPreferences] = usePersistentState<AppPreferences>(
     'music-trainer:preferences',
@@ -758,6 +760,10 @@ function IntervalTrainer({
   const statsKey = getIntervalStatsKey(settings.timeLimit, settings.mode)
   const [question, setQuestion] = useState<IntervalQuestion>(() => generateIntervalQuestion(settings.mode))
   const [feedback, setFeedback] = useState<AnswerResult | null>(null)
+  const [pitchAnswer, setPitchAnswer] = useState<{
+    letter?: NaturalNote
+    accidental?: Extract<Accidental, 'b' | '' | '#'>
+  }>({})
   const [remaining, setRemaining] = useState<number>(settings.timeLimit)
   const lockedRef = useRef(false)
   const timeoutRef = useRef<number | null>(null)
@@ -767,6 +773,7 @@ function IntervalTrainer({
     lockedRef.current = false
     setQuestion((current) => generateIntervalQuestion(settings.mode, { previousQuestionKey: intervalQuestionKey(current) }))
     setFeedback(null)
+    setPitchAnswer({})
     setRemaining(settings.timeLimit)
   }, [settings.mode, settings.timeLimit])
 
@@ -792,9 +799,25 @@ function IntervalTrainer({
     [nextQuestion, question, record, statsKey]
   )
 
+  const updatePitchAnswer = useCallback(
+    (partial: { letter?: NaturalNote; accidental?: Extract<Accidental, 'b' | '' | '#'> }) => {
+      if (feedback || question.missing === 'interval') return
+
+      setPitchAnswer((current) => {
+        const next = { ...current, ...partial }
+        if (next.letter && next.accidental !== undefined) {
+          window.setTimeout(() => finish(`${next.letter}${next.accidental}`), 0)
+        }
+        return next
+      })
+    },
+    [feedback, finish, question.missing]
+  )
+
   useEffect(() => {
     lockedRef.current = false
     setFeedback(null)
+    setPitchAnswer({})
     setRemaining(settings.timeLimit)
     const deadline = Date.now() + settings.timeLimit * 1000
     const timer = window.setInterval(() => {
@@ -825,10 +848,7 @@ function IntervalTrainer({
     )
   )
 
-  const optionGroups =
-    question.missing === 'interval'
-      ? groupIntervals(question.answerOptions as IntervalName[])
-      : [{ label: '音名', options: question.answerOptions }]
+  const optionGroups = question.missing === 'interval' ? groupIntervals(question.answerOptions as IntervalName[]) : []
 
   return (
     <section className="module-panel" data-testid="module-interval">
@@ -869,20 +889,51 @@ function IntervalTrainer({
           value={question.missing === 'interval' ? '?' : INTERVAL_LABELS[question.interval]}
         />
       </div>
-      <div className={question.missing === 'interval' ? 'interval-options grouped' : 'interval-options'}>
-        {optionGroups.map((group) => (
-          <div key={group.label} className="option-group">
-            <span>{group.label}</span>
-            <div>
-              {group.options.map((option) => (
-                <button key={option} type="button" disabled={Boolean(feedback)} onClick={() => finish(option)}>
-                  {question.missing === 'interval' ? INTERVAL_LABELS[option as IntervalName] : option}
-                </button>
-              ))}
+      {question.missing === 'interval' ? (
+        <div className="interval-options grouped">
+          {optionGroups.map((group) => (
+            <div key={group.label} className="option-group">
+              <span>{group.label}</span>
+              <div>
+                {group.options.map((option) => (
+                  <button key={option} type="button" disabled={Boolean(feedback)} onClick={() => finish(option)}>
+                    {INTERVAL_LABELS[option as IntervalName]}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <PickerRows>
+          <PickerRow label="音名">
+            {(['C', 'D', 'E', 'F', 'G', 'A', 'B'] as NaturalNote[]).map((letter) => (
+              <button
+                key={letter}
+                type="button"
+                className={pitchAnswer.letter === letter ? 'active' : ''}
+                disabled={Boolean(feedback)}
+                onClick={() => updatePitchAnswer({ letter })}
+              >
+                {letter}
+              </button>
+            ))}
+          </PickerRow>
+          <PickerRow label="升降">
+            {INTERVAL_PITCH_ACCIDENTALS.map((accidental) => (
+              <button
+                key={accidental || 'natural'}
+                type="button"
+                className={pitchAnswer.accidental === accidental ? 'active' : ''}
+                disabled={Boolean(feedback)}
+                onClick={() => updatePitchAnswer({ accidental })}
+              >
+                {formatAccidental(accidental)}
+              </button>
+            ))}
+          </PickerRow>
+        </PickerRows>
+      )}
       <FeedbackPanel feedback={feedback} onNext={nextQuestion} />
       <StatsPanel stats={getStats(stats, statsKey)} onReset={() => reset(statsKey)} />
     </section>
