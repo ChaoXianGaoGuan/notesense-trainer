@@ -90,6 +90,7 @@ https://chaoxiangaoguan.github.io/notesense-trainer/
 - 旋律短句听写
 - 和弦性质听辨
 - 根音冠音音程速算
+- 切分节奏跟拍
 - 调内级数和弦
 - 和弦所属大调
 
@@ -100,9 +101,10 @@ https://chaoxiangaoguan.github.io/notesense-trainer/
 - 旋律短句听写
 - 和弦性质听辨
 
-理论模块不显示音频设置：
+以下模块不显示钢琴/吉他音频设置：
 
 - 根音冠音音程速算
+- 切分节奏跟拍
 - 调内级数和弦
 - 和弦所属大调
 

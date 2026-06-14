@@ -1,6 +1,6 @@
 # NoteSense 音感训练器
 
-NoteSense 是一个纯前端 PWA 音乐基础训练器，用来练习音名、固定唱名、单音听辨、旋律短句听写、和弦性质听辨和音程速算。
+NoteSense 是一个纯前端 PWA 音乐基础训练器，用来练习音名、固定唱名、单音听辨、旋律短句听写、和弦性质听辨、音程速算和切分节奏。
 
 项目不需要后端、不需要账号，也不依赖云同步。打开网页即可使用，安装成 PWA 后也可以离线使用。
 
@@ -19,6 +19,7 @@ https://chaoxiangaoguan.github.io/notesense-trainer/
 - 旋律短句听写：听 2 到 5 个自然音组成的短句，输入对应音名。
 - 和弦性质听辨：听琶音加齐响和弦，判断 Major、Minor、Diminished、Augmented。
 - 根音冠音音程速算：支持算根音、算冠音、算音程和混合四种限时模式。
+- 切分节奏跟拍：看简谱式或五线谱式节奏型，按反拍、切分、附点和跨拍等阶梯难度跟着节拍器拍准节奏。
 - 调内级数和弦：给出大调和级数，用根音、升降号、和弦类型拼出该级和弦。
 - 和弦所属大调：给出三和弦，选择所有包含该调内三和弦的大调。
 - 真实采样音源：内置钢琴和吉他 mp3 采样，通过 Tone.js Sampler 播放。
@@ -33,6 +34,7 @@ https://chaoxiangaoguan.github.io/notesense-trainer/
 - Vite：前端构建工具。
 - React：界面和交互。
 - Tone.js：Web Audio 播放和采样器封装。
+- VexFlow：五线谱节奏型渲染。
 - vite-plugin-pwa：生成 manifest 和 service worker。
 - Vitest：单元测试。
 - Playwright：端到端测试和响应式布局检查。
@@ -45,6 +47,7 @@ https://chaoxiangaoguan.github.io/notesense-trainer/
 - [架构说明](docs/architecture.md)：项目分层、数据流、状态和部署形态。
 - [乐理规则](docs/music-theory.md)：音名拼写、大调集合、级数和弦、和弦所属大调规则。
 - [部署说明](docs/deployment.md)：GitHub Pages workflow、常见问题和更新流程。
+- [吉他实弹和弦验证计划](docs/future-guitar-chord-verification.md)：未来通过麦克风判断用户是否弹对目标和弦的设计草案，当前尚未实现。
 - [更新记录](CHANGELOG.md)：版本变化和主要功能记录。
 - [许可证](LICENSE)：项目代码使用 MIT License；内置音频采样见 `public/samples/ATTRIBUTION.md`。
 
@@ -78,7 +81,7 @@ e2e/         # Playwright 端到端测试
 
 大调、级数和调内和弦等纯理论规则放在 `core/` 中，当前采用 15 个传统大调调号集合。
 
-`audio/` 只负责声音播放。当前使用 Tone.js 的 `Sampler` 播放本地 mp3 采样，并暴露 `playNote`、`playTimedSequence`、`playChord`、`playArpeggioThenChord` 等接口。UI 不直接接触 Tone.js。
+`audio/` 只负责声音播放。当前使用 Tone.js 的 `Sampler` 播放本地 mp3 采样，并暴露 `playNote`、`playTimedSequence`、`playChord`、`playArpeggioThenChord` 等接口。切分节奏跟拍使用独立节拍器点击声。UI 不直接接触 Tone.js 或 Web Audio。
 
 `state/` 负责浏览器本地状态，包括用户偏好、统计、错题队列。当前使用 localStorage，后续如果要加云同步，可以优先从这一层扩展。
 

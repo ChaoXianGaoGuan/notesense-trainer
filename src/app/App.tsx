@@ -1,10 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Dispatch, MutableRefObject, ReactNode, SetStateAction } from 'react'
 import { audioEngine } from '../audio/engine'
+import { metronome } from '../audio/metronome'
 import { CHORD_LABELS } from '../core/chords'
 import { INTERVAL_LABELS } from '../core/intervals'
 import { DEGREE_ROMANS, getMajorKeyGroups, type MajorKey } from '../core/major-keys'
 import { SOLFEGE_OPTIONS, solfegeToOctavePitch } from '../core/notes'
+import {
+  buildComparisonEvents,
+  buildRhythmDemoEvents,
+  buildUserReplayEvents,
+  getCountInDurationMs,
+  getTargetTimesMs,
+  rhythmToNotationEvents,
+  type RhythmEvaluation,
+  type RhythmReplayEvent
+} from '../core/rhythm'
 import type { Accidental, AnswerResult, AudioSettings, NaturalNote, Solfege, StatsKey, Timbre } from '../core/types'
 import {
   checkChordAnswer,
@@ -62,6 +73,18 @@ import {
   type SolfegeQuestion
 } from '../modules/solfege'
 import {
+  SYNCOPATION_BPM_OPTIONS,
+  SYNCOPATION_DIFFICULTIES,
+  SYNCOPATION_DIFFICULTY_LABELS,
+  SYNCOPATION_NOTATION_LABELS,
+  checkSyncopationAnswer,
+  generateSyncopationQuestion,
+  getSyncopationBarDurationMs,
+  getSyncopationStatsKey,
+  type SyncopationQuestion,
+  type SyncopationResult
+} from '../modules/syncopation'
+import {
   NO_MATCHING_MAJOR_KEY,
   checkTriadKeyMatchAnswer,
   generateTriadKeyMatchQuestion,
@@ -81,6 +104,7 @@ const MODULES: Array<{ id: ModuleId; label: string }> = [
   { id: 'melody', label: '旋律短句听写' },
   { id: 'chord-quality', label: '和弦性质听辨' },
   { id: 'interval-speed', label: '根音冠音音程速算' },
+  { id: 'syncopation', label: '切分节奏跟拍' },
   { id: 'degree-chord', label: '调内级数和弦' },
   { id: 'triad-key-match', label: '和弦所属大调' }
 ]
@@ -164,7 +188,7 @@ export function App() {
         ))}
       </nav>
 
-      {!['interval-speed', 'degree-chord', 'triad-key-match'].includes(preferences.activeModule) && (
+      {!['interval-speed', 'syncopation', 'degree-chord', 'triad-key-match'].includes(preferences.activeModule) && (
         <AudioControls settings={preferences.audio} onChange={updateAudio} />
       )}
 
@@ -218,6 +242,16 @@ export function App() {
             stats={stats}
             settings={preferences.interval}
             updateSettings={(interval) => setPreferences((current) => ({ ...current, interval }))}
+            recordAnswer={recordModuleAnswer}
+            resetStats={resetModuleStats}
+          />
+        )}
+
+        {preferences.activeModule === 'syncopation' && (
+          <SyncopationTrainer
+            stats={stats}
+            settings={preferences.syncopation}
+            updateSettings={(syncopation) => setPreferences((current) => ({ ...current, syncopation }))}
             recordAnswer={recordModuleAnswer}
             resetStats={resetModuleStats}
           />
@@ -998,6 +1032,456 @@ function IntervalTrainer({
       <StatsPanel stats={getStats(stats, statsKey)} onReset={() => reset(statsKey)} />
     </section>
   )
+}
+
+type SyncopationPhase = 'idle' | 'count-in' | 'playing' | 'feedback'
+type RhythmPlaybackMode = 'none' | 'demo' | 'user' | 'comparison'
+type RhythmActiveCells = {
+  standard: number | null
+  user: number | null
+}
+
+function SyncopationTrainer({
+  stats,
+  settings,
+  updateSettings,
+  recordAnswer: record,
+  resetStats: reset
+}: {
+  stats: StatsState
+  settings: AppPreferences['syncopation']
+  updateSettings: (settings: AppPreferences['syncopation']) => void
+  recordAnswer: (key: StatsKey, correct: boolean) => void
+  resetStats: (key: StatsKey) => void
+}) {
+  const statsKey = getSyncopationStatsKey(settings.difficulty, settings.bpm)
+  const [question, setQuestion] = useState<SyncopationQuestion>(() => generateSyncopationQuestion(settings.difficulty))
+  const [phase, setPhase] = useState<SyncopationPhase>('idle')
+  const [feedback, setFeedback] = useState<SyncopationResult | null>(null)
+  const [hitCount, setHitCount] = useState(0)
+  const [playbackMode, setPlaybackMode] = useState<RhythmPlaybackMode>('none')
+  const [activeCells, setActiveCells] = useState<RhythmActiveCells>({ standard: null, user: null })
+  const [lastAttemptHitTimes, setLastAttemptHitTimes] = useState<number[]>([])
+  const hitTimesRef = useRef<number[]>([])
+  const runStartRef = useRef<number | null>(null)
+  const countInTimeoutRef = useRef<number | null>(null)
+  const finishTimeoutRef = useRef<number | null>(null)
+  const playbackTimeoutRefs = useRef<number[]>([])
+
+  const clearRunTimers = useCallback(() => {
+    clearPendingTimeout(countInTimeoutRef)
+    clearPendingTimeout(finishTimeoutRef)
+  }, [])
+
+  const clearPlaybackTimers = useCallback(() => {
+    playbackTimeoutRefs.current.forEach((timer) => window.clearTimeout(timer))
+    playbackTimeoutRefs.current = []
+    setActiveCells({ standard: null, user: null })
+    setPlaybackMode('none')
+  }, [])
+
+  const finish = useCallback(() => {
+    clearRunTimers()
+    const hitTimes = [...hitTimesRef.current]
+    const result = checkSyncopationAnswer(question, settings.bpm, hitTimes, settings.inputCalibrationMs)
+    setLastAttemptHitTimes(hitTimes)
+    setFeedback(result)
+    setPhase('feedback')
+    record(statsKey, result.correct)
+  }, [clearRunTimers, question, record, settings.bpm, settings.inputCalibrationMs, statsKey])
+
+  const start = useCallback(() => {
+    clearRunTimers()
+    clearPlaybackTimers()
+    hitTimesRef.current = []
+    runStartRef.current = null
+    setHitCount(0)
+    setLastAttemptHitTimes([])
+    setFeedback(null)
+    setPhase('count-in')
+    void metronome.playCountInAndBar(settings.bpm)
+
+    const countInMs = getCountInDurationMs(settings.bpm)
+    const barMs = getSyncopationBarDurationMs(settings.bpm)
+    countInTimeoutRef.current = window.setTimeout(() => {
+      runStartRef.current = Date.now()
+      setPhase('playing')
+    }, countInMs)
+    finishTimeoutRef.current = window.setTimeout(finish, countInMs + barMs + 80)
+  }, [clearPlaybackTimers, clearRunTimers, finish, settings.bpm])
+
+  const playDemo = useCallback(() => {
+    if (phase === 'count-in' || phase === 'playing') return
+    clearPlaybackTimers()
+    setPlaybackMode('demo')
+    void metronome.playCountInAndRhythm(question.cells, settings.bpm)
+
+    const countInMs = getCountInDurationMs(settings.bpm)
+    const events = buildRhythmDemoEvents(question.cells, settings.bpm)
+    events.forEach((event) => {
+      playbackTimeoutRefs.current.push(
+        window.setTimeout(() => {
+          setActiveCells({ standard: event.index, user: null })
+        }, countInMs + event.timeMs)
+      )
+    })
+    playbackTimeoutRefs.current.push(
+      window.setTimeout(() => {
+        setActiveCells({ standard: null, user: null })
+        setPlaybackMode('none')
+      }, countInMs + getSyncopationBarDurationMs(settings.bpm) + 80)
+    )
+  }, [clearPlaybackTimers, phase, question.cells, settings.bpm])
+
+  const scheduleReplayHighlights = useCallback(
+    (events: RhythmReplayEvent[]) => {
+      const countInMs = getCountInDurationMs(settings.bpm)
+      events.forEach((event) => {
+        playbackTimeoutRefs.current.push(
+          window.setTimeout(() => {
+            setActiveCells((current) => ({
+              ...current,
+              [event.kind]: event.index
+            }))
+          }, countInMs + event.timeMs)
+        )
+      })
+      playbackTimeoutRefs.current.push(
+        window.setTimeout(() => {
+          setActiveCells({ standard: null, user: null })
+          setPlaybackMode('none')
+        }, countInMs + getSyncopationBarDurationMs(settings.bpm) + 120)
+      )
+    },
+    [settings.bpm]
+  )
+
+  const calibratedAttemptHitTimes = useMemo(
+    () => lastAttemptHitTimes.map((timeMs) => timeMs + settings.inputCalibrationMs),
+    [lastAttemptHitTimes, settings.inputCalibrationMs]
+  )
+
+  const replayUser = useCallback(() => {
+    if (phase !== 'feedback' || lastAttemptHitTimes.length === 0) return
+    clearPlaybackTimers()
+    setPlaybackMode('user')
+    void metronome.playCountInAndUserHits(calibratedAttemptHitTimes, settings.bpm)
+    scheduleReplayHighlights(buildUserReplayEvents(calibratedAttemptHitTimes, settings.bpm))
+  }, [calibratedAttemptHitTimes, clearPlaybackTimers, lastAttemptHitTimes.length, phase, scheduleReplayHighlights, settings.bpm])
+
+  const replayComparison = useCallback(() => {
+    if (phase !== 'feedback' || lastAttemptHitTimes.length === 0) return
+    clearPlaybackTimers()
+    setPlaybackMode('comparison')
+    void metronome.playCountInAndComparison(question.cells, calibratedAttemptHitTimes, settings.bpm)
+    scheduleReplayHighlights(buildComparisonEvents(question.cells, settings.bpm, calibratedAttemptHitTimes))
+  }, [calibratedAttemptHitTimes, clearPlaybackTimers, lastAttemptHitTimes.length, phase, question.cells, scheduleReplayHighlights, settings.bpm])
+
+  const tap = useCallback(() => {
+    if (phase === 'idle') {
+      start()
+      return
+    }
+    if (phase !== 'playing' || runStartRef.current === null) return
+    hitTimesRef.current = [...hitTimesRef.current, Date.now() - runStartRef.current]
+    setHitCount(hitTimesRef.current.length)
+  }, [phase, start])
+
+  const nextQuestion = useCallback(() => {
+    clearRunTimers()
+    clearPlaybackTimers()
+    setQuestion((current) =>
+      generateSyncopationQuestion(settings.difficulty, { previousQuestionKey: current.templateId })
+    )
+    hitTimesRef.current = []
+    runStartRef.current = null
+    setHitCount(0)
+    setLastAttemptHitTimes([])
+    setFeedback(null)
+    setPhase('idle')
+  }, [clearPlaybackTimers, clearRunTimers, settings.difficulty])
+
+  useEffect(() => {
+    clearRunTimers()
+    clearPlaybackTimers()
+    setQuestion(generateSyncopationQuestion(settings.difficulty))
+    hitTimesRef.current = []
+    runStartRef.current = null
+    setHitCount(0)
+    setLastAttemptHitTimes([])
+    setFeedback(null)
+    setPhase('idle')
+    return () => {
+      clearRunTimers()
+      clearPlaybackTimers()
+    }
+  }, [clearPlaybackTimers, clearRunTimers, settings.bpm, settings.difficulty])
+
+  useHotkeys(
+    useMemo(
+      () => ({
+        onSpace: () => {
+          if (phase === 'feedback') {
+            nextQuestion()
+            return
+          }
+          tap()
+        },
+        onReset: () => reset(statsKey)
+      }),
+      [nextQuestion, phase, reset, statsKey, tap]
+    )
+  )
+
+  const phaseLabel = {
+    idle: '准备',
+    'count-in': '预备拍',
+    playing: '跟拍中',
+    feedback: '已完成'
+  }[phase]
+  const isPlaybackActive = playbackMode !== 'none'
+  const canPlayDemo = (phase === 'idle' || phase === 'feedback') && !isPlaybackActive
+  const canReplayAttempt = phase === 'feedback' && lastAttemptHitTimes.length > 0 && !isPlaybackActive
+
+  return (
+    <section className="module-panel" data-testid="module-syncopation">
+      <ModuleHeader title="切分节奏跟拍" />
+      <div className="settings-row">
+        <SegmentedControl
+          label="难度"
+          value={String(settings.difficulty)}
+          options={SYNCOPATION_DIFFICULTIES.map((difficulty) => ({
+            value: String(difficulty),
+            label: SYNCOPATION_DIFFICULTY_LABELS[difficulty]
+          }))}
+          onChange={(value) =>
+            updateSettings({ ...settings, difficulty: Number(value) as AppPreferences['syncopation']['difficulty'] })
+          }
+        />
+        <SegmentedControl
+          label="速度"
+          value={String(settings.bpm)}
+          options={SYNCOPATION_BPM_OPTIONS.map((bpm) => ({ value: String(bpm), label: `${bpm} bpm` }))}
+          onChange={(value) => updateSettings({ ...settings, bpm: Number(value) as AppPreferences['syncopation']['bpm'] })}
+        />
+        <SegmentedControl
+          label="显示"
+          value={settings.notation}
+          options={[
+            { value: 'jianpu', label: SYNCOPATION_NOTATION_LABELS.jianpu },
+            { value: 'staff', label: SYNCOPATION_NOTATION_LABELS.staff }
+          ]}
+          onChange={(value) => updateSettings({ ...settings, notation: value as AppPreferences['syncopation']['notation'] })}
+        />
+        <label className="calibration-control">
+          <span>输入校准</span>
+          <input
+            type="range"
+            min="-200"
+            max="200"
+            step="10"
+            value={settings.inputCalibrationMs}
+            onChange={(event) => updateSettings({ ...settings, inputCalibrationMs: Number(event.target.value) })}
+          />
+          <strong>{settings.inputCalibrationMs}ms</strong>
+          <small>使用空格可能会有约 140ms 的延迟</small>
+        </label>
+      </div>
+      <div className="syncopation-status">
+        <span>题型：{question.label}</span>
+        <span>状态：{phaseLabel}</span>
+        <span>已拍：{hitCount}</span>
+      </div>
+      {settings.notation === 'jianpu' ? (
+        <JianpuRhythm cells={question.cells} evaluation={feedback?.evaluation ?? null} activeCells={activeCells} />
+      ) : (
+        <StaffRhythm cells={question.cells} evaluation={feedback?.evaluation ?? null} activeCells={activeCells} />
+      )}
+      <div className="syncopation-actions">
+        <button type="button" className="primary" disabled={phase === 'count-in' || phase === 'playing' || isPlaybackActive} onClick={start}>
+          {phase === 'feedback' ? '再来一次' : '开始'}
+        </button>
+        <button type="button" disabled={!canPlayDemo} onClick={playDemo}>
+          {playbackMode === 'demo' ? '示范中' : '正确节奏'}
+        </button>
+        <button type="button" className="tap-button" disabled={phase !== 'playing' || isPlaybackActive} onClick={tap}>
+          拍
+        </button>
+        <button type="button" disabled={phase === 'count-in' || phase === 'playing' || isPlaybackActive} onClick={nextQuestion}>
+          下一题
+        </button>
+      </div>
+      <SyncopationFeedback
+        feedback={feedback}
+        canReplayAttempt={canReplayAttempt}
+        playbackMode={playbackMode}
+        onReplayUser={replayUser}
+        onReplayComparison={replayComparison}
+        onNext={nextQuestion}
+      />
+      <StatsPanel stats={getStats(stats, statsKey)} onReset={() => reset(statsKey)} />
+    </section>
+  )
+}
+
+function JianpuRhythm({
+  cells,
+  evaluation,
+  activeCells
+}: {
+  cells: SyncopationQuestion['cells']
+  evaluation: RhythmEvaluation | null
+  activeCells: RhythmActiveCells
+}) {
+  const events = rhythmToNotationEvents(cells)
+  return (
+    <div className="jianpu-rhythm" aria-label="简谱节奏型">
+      {events.map((event) => (
+        <div
+          key={`${event.start}-${event.kind}`}
+          className={`jianpu-event ${event.kind} duration-${event.durationCells}`}
+          style={{ gridColumn: `span ${event.durationCells}` }}
+        >
+          <span>
+            {event.kind === 'note' ? 'X' : '0'}
+            {event.durationCells === 3 && <em aria-hidden="true">.</em>}
+          </span>
+          {event.durationCells <= 3 && <i aria-hidden="true" />}
+          {event.durationCells === 1 && <i aria-hidden="true" />}
+        </div>
+      ))}
+      <RhythmFeedbackGrid cells={cells} evaluation={evaluation} activeCells={activeCells} />
+    </div>
+  )
+}
+
+function StaffRhythm({
+  cells,
+  evaluation,
+  activeCells
+}: {
+  cells: SyncopationQuestion['cells']
+  evaluation: RhythmEvaluation | null
+  activeCells: RhythmActiveCells
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function renderStaff() {
+      if (!containerRef.current) return
+      const { Formatter, Renderer, Stave, StaveNote, Voice } = await import('vexflow')
+      if (cancelled || !containerRef.current) return
+      containerRef.current.innerHTML = ''
+      const renderer = new Renderer(containerRef.current, Renderer.Backends.SVG)
+      renderer.resize(760, 160)
+      const context = renderer.getContext()
+      const stave = new Stave(10, 28, 720)
+      stave.addClef('percussion').addTimeSignature('4/4')
+      stave.setContext(context).draw()
+
+      const notes = rhythmToNotationEvents(cells).map((event) => {
+        const duration = event.durationCells === 1 ? '16' : event.durationCells === 2 ? '8' : event.durationCells === 3 ? '8d' : 'q'
+        return new StaveNote({
+          keys: ['b/4'],
+          duration: event.kind === 'rest' ? `${duration}r` : duration,
+          clef: 'percussion'
+        })
+      })
+      const voice = new Voice({ numBeats: 4, beatValue: 4 })
+      voice.addTickables(notes)
+      new Formatter().joinVoices([voice]).format([voice], 640)
+      voice.draw(context, stave)
+    }
+
+    void renderStaff()
+    return () => {
+      cancelled = true
+    }
+  }, [cells])
+
+  return (
+    <div className="staff-rhythm" aria-label="五线谱节奏型">
+      <div ref={containerRef} className="staff-canvas" />
+      <RhythmFeedbackGrid cells={cells} evaluation={evaluation} activeCells={activeCells} />
+    </div>
+  )
+}
+
+function RhythmFeedbackGrid({
+  cells,
+  evaluation,
+  activeCells
+}: {
+  cells: SyncopationQuestion['cells']
+  evaluation: RhythmEvaluation | null
+  activeCells: RhythmActiveCells
+}) {
+  const labels = ['1', 'e', '&', 'a', '2', 'e', '&', 'a', '3', 'e', '&', 'a', '4', 'e', '&', 'a']
+  const targetByIndex = new Map(evaluation?.targets.map((target) => [target.index, target]) ?? [])
+  const extraIndexes = new Set(evaluation?.extras.map((extra) => extra.index) ?? [])
+  return (
+    <div className="rhythm-feedback-grid" aria-label="节奏反馈格">
+      {cells.map((cell, index) => {
+        const target = targetByIndex.get(index)
+        const extra = extraIndexes.has(index)
+        const status = extra ? 'extra' : target?.status
+        const standardActiveClass = activeCells.standard === index ? 'standard-active' : ''
+        const userActiveClass = activeCells.user === index ? 'user-active' : ''
+        const demoClass = activeCells.standard === index || activeCells.user === index ? 'demo-active' : ''
+        return (
+          <div key={`${cell}-${index}`} className={`rhythm-cell ${cell} ${status ?? ''} ${demoClass} ${standardActiveClass} ${userActiveClass}`}>
+            <span>{labels[index]}</span>
+            <strong>{getRhythmCellMark(cell, status)}</strong>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function SyncopationFeedback({
+  feedback,
+  canReplayAttempt,
+  playbackMode,
+  onReplayUser,
+  onReplayComparison,
+  onNext
+}: {
+  feedback: SyncopationResult | null
+  canReplayAttempt: boolean
+  playbackMode: RhythmPlaybackMode
+  onReplayUser: () => void
+  onReplayComparison: () => void
+  onNext: () => void
+}) {
+  if (!feedback) return null
+  return (
+    <div className={`feedback ${feedback.correct ? 'correct' : 'wrong'}`} role="status">
+      <strong>{feedback.correct ? '正确' : '错误'}</strong>
+      <span>{feedback.explanation}</span>
+      <button type="button" disabled={!canReplayAttempt} onClick={onReplayUser}>
+        {playbackMode === 'user' ? '回放中' : '回放我的节奏'}
+      </button>
+      <button type="button" disabled={!canReplayAttempt} onClick={onReplayComparison}>
+        {playbackMode === 'comparison' ? '对比中' : '对比标准'}
+      </button>
+      <button type="button" disabled={playbackMode !== 'none'} onClick={onNext}>
+        下一题
+      </button>
+    </div>
+  )
+}
+
+function getRhythmCellMark(cell: SyncopationQuestion['cells'][number], status?: string): string {
+  if (status === 'extra') return '多'
+  if (status === 'missed') return '漏'
+  if (status === 'early') return '早'
+  if (status === 'late') return '晚'
+  if (status === 'hit') return '准'
+  if (cell === 'attack') return 'X'
+  if (cell === 'hold') return '—'
+  return '0'
 }
 
 function DegreeChordTrainer({

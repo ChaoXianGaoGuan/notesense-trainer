@@ -32,6 +32,7 @@ export type StatsKey =
   | `melody:${2 | 3 | 4 | 5}`
   | `chord-quality:${1 | 2 | 3 | 4}`
   | `interval-speed:${5 | 10}:${'missing-top' | 'missing-root' | 'missing-interval' | 'mixed'}`
+  | `syncopation:${1 | 2 | 3 | 4 | 5}:${60 | 80 | 100}`
   | 'degree-chord'
   | 'triad-key-match'
 

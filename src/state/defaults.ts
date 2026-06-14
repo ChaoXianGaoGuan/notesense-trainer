@@ -3,6 +3,7 @@ import type { ChordStage } from '../modules/chord-quality'
 import type { IntervalMode, IntervalTimeLimit } from '../modules/interval-speed'
 import type { MelodyLength, MelodyPlaybackMode } from '../modules/melody'
 import type { ListenPlaybackMode, SingleNoteDifficulty } from '../modules/single-note'
+import type { SyncopationBpm, SyncopationDifficulty, SyncopationNotation } from '../modules/syncopation'
 
 export type ModuleId =
   | 'solfege'
@@ -10,6 +11,7 @@ export type ModuleId =
   | 'melody'
   | 'chord-quality'
   | 'interval-speed'
+  | 'syncopation'
   | 'degree-chord'
   | 'triad-key-match'
 
@@ -31,6 +33,12 @@ export type AppPreferences = {
   interval: {
     timeLimit: IntervalTimeLimit
     mode: IntervalMode
+  }
+  syncopation: {
+    difficulty: SyncopationDifficulty
+    bpm: SyncopationBpm
+    notation: SyncopationNotation
+    inputCalibrationMs: number
   }
 }
 
@@ -62,6 +70,12 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   interval: {
     timeLimit: 10,
     mode: 'missing-top'
+  },
+  syncopation: {
+    difficulty: 1,
+    bpm: 60,
+    notation: 'jianpu',
+    inputCalibrationMs: -140
   }
 }
 
@@ -96,10 +110,42 @@ export function normalizePreferences(preferences: AppPreferences): AppPreference
       mode: isSupportedIntervalMode(preferences.interval?.mode)
         ? preferences.interval.mode
         : DEFAULT_PREFERENCES.interval.mode
+    },
+    syncopation: {
+      ...DEFAULT_PREFERENCES.syncopation,
+      ...preferences.syncopation,
+      difficulty: isSupportedSyncopationDifficulty(preferences.syncopation?.difficulty)
+        ? preferences.syncopation.difficulty
+        : DEFAULT_PREFERENCES.syncopation.difficulty,
+      bpm: isSupportedSyncopationBpm(preferences.syncopation?.bpm)
+        ? preferences.syncopation.bpm
+        : DEFAULT_PREFERENCES.syncopation.bpm,
+      notation: isSupportedSyncopationNotation(preferences.syncopation?.notation)
+        ? preferences.syncopation.notation
+        : DEFAULT_PREFERENCES.syncopation.notation,
+      inputCalibrationMs: isSupportedSyncopationCalibration(preferences.syncopation?.inputCalibrationMs)
+        ? preferences.syncopation.inputCalibrationMs
+        : DEFAULT_PREFERENCES.syncopation.inputCalibrationMs
     }
   }
 }
 
 function isSupportedIntervalMode(value: unknown): value is IntervalMode {
   return value === 'missing-top' || value === 'missing-root' || value === 'missing-interval' || value === 'mixed'
+}
+
+function isSupportedSyncopationDifficulty(value: unknown): value is SyncopationDifficulty {
+  return value === 1 || value === 2 || value === 3 || value === 4 || value === 5
+}
+
+function isSupportedSyncopationBpm(value: unknown): value is SyncopationBpm {
+  return value === 60 || value === 80 || value === 100
+}
+
+function isSupportedSyncopationNotation(value: unknown): value is SyncopationNotation {
+  return value === 'jianpu' || value === 'staff'
+}
+
+function isSupportedSyncopationCalibration(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= -200 && value <= 200
 }

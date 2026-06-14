@@ -1,5 +1,15 @@
 import { buildDegreeChord, buildMajorScale, findMajorKeysForTriad } from '../core/major-keys'
 import { getNaturalNoteFromPitch } from '../core/notes'
+import {
+  buildComparisonEvents,
+  buildRhythmDemoEvents,
+  buildUserReplayEvents,
+  evaluateRhythmHits,
+  getTargetTimesMs,
+  getTemplatesForDifficulty,
+  rhythmToNotationEvents
+} from '../core/rhythm'
+import { DEFAULT_PREFERENCES, normalizePreferences, type AppPreferences } from '../state/defaults'
 import { recordAnswer, resetStats } from '../state/stats'
 import { addReviewItems, getReviewQueue } from '../state/review'
 import { generateChordQuestion, chordQualitiesForStage } from './chord-quality'
@@ -27,6 +37,11 @@ import {
   checkTriadKeyMatchAnswer,
   findNoMatchTriadQuestion
 } from './triad-key-match'
+import {
+  checkSyncopationAnswer,
+  generateSyncopationQuestion,
+  getSyncopationStatsKey
+} from './syncopation'
 
 describe('single-note trainer', () => {
   it('generates targets inside the selected difficulty', () => {
@@ -140,6 +155,128 @@ describe('interval trainer', () => {
   })
 })
 
+describe('syncopation trainer', () => {
+  it('uses legal 16-cell rhythm templates for each difficulty', () => {
+    for (const difficulty of [1, 2, 3, 4, 5] as const) {
+      const templates = getTemplatesForDifficulty(difficulty)
+      expect(templates.length).toBeGreaterThan(0)
+      for (const template of templates) {
+        expect(template.cells).toHaveLength(16)
+        expect(template.cells.filter((cell) => cell === 'attack').length).toBeGreaterThan(0)
+        expect(rhythmToNotationEvents(template.cells).reduce((sum, event) => sum + event.durationCells, 0)).toBe(16)
+      }
+    }
+  })
+
+  it('generates difficulty-specific questions and avoids immediate repeats', () => {
+    const first = generateSyncopationQuestion(1)
+    const second = generateSyncopationQuestion(1, { previousQuestionKey: first.templateId })
+    expect(getTemplatesForDifficulty(1).map((template) => template.id)).toContain(first.templateId)
+    expect(second.templateId).not.toBe(first.templateId)
+    expect(generateSyncopationQuestion(5).cells).toContain('hold')
+  })
+
+  it('orders syncopation difficulties from offbeats to dotted and tied syncopation', () => {
+    expect(getTemplatesForDifficulty(1).some((template) => template.cells.some((cell, index) => cell === 'attack' && index % 4 === 2))).toBe(true)
+    expect(getTemplatesForDifficulty(2).some((template) => template.cells.some((cell, index) => cell === 'attack' && index % 4 === 0))).toBe(true)
+    expect(getTemplatesForDifficulty(3).some((template) => template.cells.some((cell, index) => cell === 'attack' && index % 2 === 1))).toBe(true)
+    expect(getTemplatesForDifficulty(4).some((template) => rhythmToNotationEvents(template.cells).some((event) => event.durationCells === 3))).toBe(true)
+    expect(getTemplatesForDifficulty(5).some((template) => template.cells.includes('hold'))).toBe(true)
+  })
+
+  it('converts bpm to target times', () => {
+    const question = generateSyncopationQuestion(1)
+    const targets = getTargetTimesMs(question.cells, 60)
+    expect(targets.every((time) => time % 250 === 0)).toBe(true)
+  })
+
+  it('builds standard rhythm demo events for one bar', () => {
+    const question = generateSyncopationQuestion(1)
+    const events = buildRhythmDemoEvents(question.cells, 60)
+    expect(events).toHaveLength(16)
+    expect(events[0]).toEqual({ index: 0, timeMs: 0, attack: question.cells[0] === 'attack' })
+    expect(events.at(-1)?.timeMs).toBe(3750)
+    expect(events.filter((event) => event.attack).map((event) => event.index)).toEqual(
+      question.cells.flatMap((cell, index) => (cell === 'attack' ? [index] : []))
+    )
+  })
+
+  it('maps user replay and comparison events to visual cells', () => {
+    const question = {
+      id: 'q',
+      templateId: 'test',
+      label: 'test',
+      cells: ['attack', 'rest', 'attack', 'hold', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest']
+    } as const
+
+    expect(buildUserReplayEvents([], 60)).toEqual([])
+    expect(buildUserReplayEvents([0, 625], 60)).toEqual([
+      { index: 0, timeMs: 0, kind: 'user' },
+      { index: 3, timeMs: 625, kind: 'user' }
+    ])
+
+    const comparison = buildComparisonEvents(question.cells, 60, [625])
+    expect(comparison).toContainEqual({ index: 0, timeMs: 0, kind: 'standard' })
+    expect(comparison).toContainEqual({ index: 2, timeMs: 500, kind: 'standard' })
+    expect(comparison).toContainEqual({ index: 3, timeMs: 625, kind: 'user' })
+  })
+
+  it('judges hits, misses, early, late, and extras', () => {
+    const question = {
+      id: 'q',
+      templateId: 'test',
+      label: 'test',
+      cells: ['attack', 'rest', 'rest', 'rest', 'attack', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest']
+    } as const
+
+    expect(evaluateRhythmHits(question.cells, 60, [0, 1000]).correct).toBe(true)
+
+    const missed = evaluateRhythmHits(question.cells, 60, [0])
+    expect(missed.correct).toBe(false)
+    expect(missed.targets.at(1)?.status).toBe('missed')
+
+    const earlyLateExtra = evaluateRhythmHits(question.cells, 60, [-130, 1130, 1700])
+    expect(earlyLateExtra.targets[0].status).toBe('early')
+    expect(earlyLateExtra.targets[1].status).toBe('late')
+    expect(earlyLateExtra.extras).toHaveLength(1)
+  })
+
+  it('reports near target taps as early or late instead of extra', () => {
+    const question = {
+      id: 'q',
+      templateId: 'test',
+      label: 'test',
+      cells: ['rest', 'rest', 'attack', 'hold', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest']
+    } as const
+
+    const result = evaluateRhythmHits(question.cells, 60, [625])
+    expect(result.correct).toBe(false)
+    expect(result.targets[0].status).toBe('late')
+    expect(result.extras).toEqual([])
+  })
+
+  it('returns answer feedback and stats key by difficulty and bpm', () => {
+    const question = generateSyncopationQuestion(2)
+    const result = checkSyncopationAnswer(question, 80, [])
+    expect(result.correct).toBe(false)
+    expect(result.explanation).toContain('漏拍')
+    expect(getSyncopationStatsKey(5, 100)).toBe('syncopation:5:100')
+  })
+
+  it('applies input calibration to judgement and replay event timing', () => {
+    const question = {
+      id: 'q',
+      templateId: 'test',
+      label: 'test',
+      cells: ['attack', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest']
+    } as const
+
+    expect(checkSyncopationAnswer(question, 60, [140]).correct).toBe(false)
+    expect(checkSyncopationAnswer(question, 60, [140], -140).correct).toBe(true)
+    expect(buildUserReplayEvents([140 + -140], 60)).toEqual([{ index: 0, timeMs: 0, kind: 'user' }])
+  })
+})
+
 describe('major key theory', () => {
   it('spells traditional major scales', () => {
     expect(buildMajorScale('C#').notes).toEqual(['C#', 'D#', 'E#', 'F#', 'G#', 'A#', 'B#'])
@@ -215,5 +352,29 @@ describe('state helpers', () => {
     )
     expect(getReviewQueue(queues, key)).toEqual([{ target: 'D4', mistakenNote: 'C' }])
     expect(getReviewQueue(queues, getSingleNoteStatsKey(2))).toEqual([])
+  })
+
+  it('fills syncopation defaults for older preferences', () => {
+    const legacy = {
+      ...DEFAULT_PREFERENCES,
+      syncopation: undefined
+    } as unknown as AppPreferences
+    expect(normalizePreferences(legacy).syncopation).toEqual({
+      difficulty: 1,
+      bpm: 60,
+      notation: 'jianpu',
+      inputCalibrationMs: -140
+    })
+  })
+
+  it('normalizes syncopation difficulty and input calibration', () => {
+    expect(normalizePreferences({ ...DEFAULT_PREFERENCES, syncopation: { difficulty: 5, bpm: 60, notation: 'jianpu', inputCalibrationMs: 200 } }).syncopation).toMatchObject({
+      difficulty: 5,
+      inputCalibrationMs: 200
+    })
+    expect(normalizePreferences({ ...DEFAULT_PREFERENCES, syncopation: { difficulty: 9, bpm: 60, notation: 'jianpu', inputCalibrationMs: 220 } as never }).syncopation).toMatchObject({
+      difficulty: 1,
+      inputCalibrationMs: -140
+    })
   })
 })
