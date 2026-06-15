@@ -152,9 +152,14 @@ export function framesToStableEvents(framePitches: FramePitch[]): SungPitchEvent
 
   for (const frame of framePitches) {
     const previous = current.at(-1)
+    const currentMidi = current.length > 0 ? mode(current.map((currentFrame) => currentFrame.midi)) : null
     if (
       !previous ||
-      (Math.abs(previous.midi - frame.midi) <= 1 && frame.timeMs - previous.timeMs <= SAME_NOTE_GAP_MS)
+      (
+        currentMidi !== null &&
+        Math.abs(currentMidi - frame.midi) <= 1 &&
+        frame.timeMs - previous.timeMs <= SAME_NOTE_GAP_MS
+      )
     ) {
       current.push(frame)
       continue

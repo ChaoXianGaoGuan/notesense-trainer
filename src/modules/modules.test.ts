@@ -6,6 +6,7 @@ import {
   relativePitchPatternLabel,
   relativePitchPatternToNotes
 } from '../core/relative-pitch'
+import { framesToStableEvents } from '../audio/input-analyzer'
 import {
   buildComparisonEvents,
   buildRhythmDemoEvents,
@@ -356,6 +357,21 @@ describe('relative pitch singing trainer', () => {
       { midi: 64, cents: 0, durationMs: 200 },
       { midi: 60, cents: 0, durationMs: 200 }
     ]).correct).toBe(false)
+  })
+
+  it('does not merge three sung notes through chromatic transition frames', () => {
+    const events = framesToStableEvents([
+      { midi: 48, cents: 0, timeMs: 0 },
+      { midi: 48, cents: -8, timeMs: 60 },
+      { midi: 49, cents: -10, timeMs: 120 },
+      { midi: 50, cents: -12, timeMs: 180 },
+      { midi: 50, cents: -16, timeMs: 240 },
+      { midi: 49, cents: -8, timeMs: 300 },
+      { midi: 48, cents: -5, timeMs: 360 },
+      { midi: 48, cents: -7, timeMs: 420 }
+    ])
+
+    expect(events.map((event) => event.midi)).toEqual([48, 50, 48])
   })
 })
 
