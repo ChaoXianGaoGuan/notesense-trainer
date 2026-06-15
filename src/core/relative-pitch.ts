@@ -46,27 +46,17 @@ const C_MAJOR_DOWN: Record<number, OctavePitch> = {
   8: 'C4'
 }
 
-const DEGREE_TO_MIDI_UP: Record<number, number> = {
-  1: 60,
-  2: 62,
-  3: 64,
-  4: 65,
-  5: 67,
-  6: 69,
-  7: 71,
-  8: 72
-}
+const PITCH_CLASS_TO_DEGREE = new Map<number, number>([
+  [0, 1],
+  [2, 2],
+  [4, 3],
+  [5, 4],
+  [7, 5],
+  [9, 6],
+  [11, 7]
+])
 
-const DEGREE_TO_MIDI_DOWN: Record<number, number> = {
-  1: 72,
-  2: 62,
-  3: 64,
-  4: 65,
-  5: 67,
-  6: 69,
-  7: 71,
-  8: 60
-}
+const C_MAJOR_PITCH_CLASSES = new Set(PITCH_CLASS_TO_DEGREE.keys())
 
 export const RELATIVE_PITCH_DIFFICULTIES: RelativePitchDifficulty[] = [2, 3, 4, 5, 6, 7]
 export const RELATIVE_PITCH_DIRECTIONS: RelativePitchDirection[] = ['up', 'down', 'mixed']
@@ -124,10 +114,12 @@ export function pitchEventToDegree(
   centsTolerance = 50
 ): number | null {
   if (Math.abs(event.cents) > centsTolerance) return null
-  const degreeMap = direction === 'up' ? DEGREE_TO_MIDI_UP : DEGREE_TO_MIDI_DOWN
-  const degree = Object.entries(degreeMap).find(([, midi]) => midi === event.midi)?.[0]
-  if (!degree) return null
-  return Number(degree) === 8 ? 1 : Number(degree)
+  void direction
+  return PITCH_CLASS_TO_DEGREE.get(modulo(event.midi, 12)) ?? null
+}
+
+export function isCmajorPitchClass(midi: number): boolean {
+  return C_MAJOR_PITCH_CLASSES.has(modulo(midi, 12))
 }
 
 function buildDegreeSeries(
@@ -168,4 +160,8 @@ function formatRelativePitchExplanation(expectedDegrees: number[], detectedDegre
     return `识别到：${detectedDegrees.join('')}；音高顺序正确`
   }
   return `第 ${firstWrongIndex + 1} 个音应为 ${expectedDegrees[firstWrongIndex]}，识别为 ${detectedDegrees[firstWrongIndex]}`
+}
+
+function modulo(value: number, divisor: number): number {
+  return ((value % divisor) + divisor) % divisor
 }

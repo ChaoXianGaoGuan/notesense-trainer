@@ -1568,7 +1568,7 @@ function RelativePitchSingTrainer({
       replaceRecordingUrl(analysis.audioUrl)
       const result = checkRelativePitchSingAnswer(question, analysis.events)
       setFeedback(result)
-      setMicMessage(`识别到 ${result.detectedDegrees.length} 个稳定音`)
+      setMicMessage(`候选音高 ${analysis.rawFrameCount} 帧，稳定音 ${result.detectedDegrees.length} 个`)
       setPhase('feedback')
       record(statsKey, result.correct)
     } catch (error) {

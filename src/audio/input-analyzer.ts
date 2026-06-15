@@ -9,9 +9,10 @@ type FramePitch = {
 export type InputAnalysisResult = {
   events: SungPitchEvent[]
   audioUrl: string | null
+  rawFrameCount: number
 }
 
-const MIN_STABLE_DURATION_MS = 160
+const MIN_STABLE_DURATION_MS = 120
 const SAME_NOTE_GAP_MS = 200
 const FRAME_INTERVAL_MS = 60
 
@@ -81,7 +82,8 @@ export const inputAnalyzer = {
     await stop()
     return {
       events: framesToStableEvents(capturedFrames),
-      audioUrl
+      audioUrl,
+      rawFrameCount: capturedFrames.length
     }
   },
 
@@ -150,7 +152,10 @@ export function framesToStableEvents(framePitches: FramePitch[]): SungPitchEvent
 
   for (const frame of framePitches) {
     const previous = current.at(-1)
-    if (!previous || (previous.midi === frame.midi && frame.timeMs - previous.timeMs <= SAME_NOTE_GAP_MS)) {
+    if (
+      !previous ||
+      (Math.abs(previous.midi - frame.midi) <= 1 && frame.timeMs - previous.timeMs <= SAME_NOTE_GAP_MS)
+    ) {
       current.push(frame)
       continue
     }
@@ -163,7 +168,7 @@ export function framesToStableEvents(framePitches: FramePitch[]): SungPitchEvent
 
 function detectPitch(buffer: Float32Array, sampleRate: number): number | null {
   const rms = Math.sqrt(buffer.reduce((sum, sample) => sum + sample * sample, 0) / buffer.length)
-  if (rms < 0.015) return null
+  if (rms < 0.006) return null
 
   let bestOffset = -1
   let bestCorrelation = 0
@@ -172,17 +177,19 @@ function detectPitch(buffer: Float32Array, sampleRate: number): number | null {
 
   for (let offset = minOffset; offset <= maxOffset; offset += 1) {
     let correlation = 0
+    let energy = 0
     for (let index = 0; index < buffer.length - offset; index += 1) {
       correlation += buffer[index] * buffer[index + offset]
+      energy += buffer[index] * buffer[index] + buffer[index + offset] * buffer[index + offset]
     }
-    correlation /= buffer.length - offset
+    correlation = energy === 0 ? 0 : (2 * correlation) / energy
     if (correlation > bestCorrelation) {
       bestCorrelation = correlation
       bestOffset = offset
     }
   }
 
-  if (bestOffset === -1 || bestCorrelation < 0.002) return null
+  if (bestOffset === -1 || bestCorrelation < 0.35) return null
   return sampleRate / bestOffset
 }
 

@@ -330,6 +330,22 @@ describe('relative pitch singing trainer', () => {
       { midi: 60, cents: 0, durationMs: 200 }
     ]).correct).toBe(false)
 
+    expect(evaluateRelativePitchAnswer(pattern, [
+      { midi: 48, cents: 0, durationMs: 200 },
+      { midi: 50, cents: 0, durationMs: 200 },
+      { midi: 48, cents: 0, durationMs: 200 }
+    ]).correct).toBe(true)
+
+    expect(evaluateRelativePitchAnswer(pattern, [
+      { midi: 49, cents: -9, durationMs: 220 },
+      { midi: 48, cents: -16, durationMs: 620 },
+      { midi: 50, cents: -17, durationMs: 580 },
+      { midi: 48, cents: -7, durationMs: 620 }
+    ])).toMatchObject({
+      correct: true,
+      detectedDegrees: [1, 2, 1]
+    })
+
     expect(checkRelativePitchSingAnswer({
       id: 'q',
       pattern,
