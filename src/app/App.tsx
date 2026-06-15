@@ -1532,10 +1532,18 @@ function RelativePitchSingTrainer({
   const [phase, setPhase] = useState<RelativePitchSingPhase>('idle')
   const [feedback, setFeedback] = useState<RelativePitchSingResult | null>(null)
   const [micMessage, setMicMessage] = useState('准备录音')
+  const [recordingUrl, setRecordingUrl] = useState<string | null>(null)
   const recordingTimeoutRef = useRef<number | null>(null)
 
   const clearRecordingTimer = useCallback(() => {
     clearPendingTimeout(recordingTimeoutRef)
+  }, [])
+
+  const replaceRecordingUrl = useCallback((url: string | null) => {
+    setRecordingUrl((current) => {
+      if (current) URL.revokeObjectURL(current)
+      return url
+    })
   }, [])
 
   const playDo = useCallback(() => {
@@ -1556,8 +1564,9 @@ function RelativePitchSingTrainer({
   const finishRecording = useCallback(async () => {
     clearRecordingTimer()
     try {
-      const sungEvents = await inputAnalyzer.stopAndAnalyze()
-      const result = checkRelativePitchSingAnswer(question, sungEvents)
+      const analysis = await inputAnalyzer.stopAndAnalyze()
+      replaceRecordingUrl(analysis.audioUrl)
+      const result = checkRelativePitchSingAnswer(question, analysis.events)
       setFeedback(result)
       setMicMessage(`识别到 ${result.detectedDegrees.length} 个稳定音`)
       setPhase('feedback')
@@ -1571,6 +1580,7 @@ function RelativePitchSingTrainer({
   const startRecording = useCallback(async () => {
     clearRecordingTimer()
     setFeedback(null)
+    replaceRecordingUrl(null)
     setMicMessage('请求麦克风权限')
     try {
       await audioEngine.playNote(question.pattern.direction === 'up' ? 'C4' : 'C5', audioSettings)
@@ -1584,7 +1594,7 @@ function RelativePitchSingTrainer({
       setPhase('idle')
       setMicMessage(error instanceof Error ? error.message : '无法打开麦克风，请检查浏览器权限')
     }
-  }, [audioSettings, clearRecordingTimer, finishRecording, question.pattern.direction])
+  }, [audioSettings, clearRecordingTimer, finishRecording, question.pattern.direction, replaceRecordingUrl])
 
   const nextQuestion = useCallback(() => {
     clearRecordingTimer()
@@ -1592,21 +1602,24 @@ function RelativePitchSingTrainer({
       generateRelativePitchSingQuestion(settings, { previousQuestionKey: current.pattern.id })
     )
     setFeedback(null)
+    replaceRecordingUrl(null)
     setPhase('idle')
     setMicMessage('准备录音')
-  }, [clearRecordingTimer, settings])
+  }, [clearRecordingTimer, replaceRecordingUrl, settings])
 
   useEffect(() => {
     clearRecordingTimer()
     setQuestion(generateRelativePitchSingQuestion(settings))
     setFeedback(null)
+    replaceRecordingUrl(null)
     setPhase('idle')
     setMicMessage('准备录音')
     return () => {
       clearRecordingTimer()
-      void inputAnalyzer.stopAndAnalyze().catch(() => undefined)
+      void inputAnalyzer.cancel().catch(() => undefined)
+      replaceRecordingUrl(null)
     }
-  }, [clearRecordingTimer, settings.difficulty, settings.direction, settings.order])
+  }, [clearRecordingTimer, replaceRecordingUrl, settings.difficulty, settings.direction, settings.order])
 
   return (
     <section className="module-panel" data-testid="module-relative-pitch-sing">
@@ -1668,13 +1681,19 @@ function RelativePitchSingTrainer({
           下一题
         </button>
       </div>
-      <RelativePitchSingFeedback feedback={feedback} />
+      <RelativePitchSingFeedback feedback={feedback} recordingUrl={recordingUrl} />
       <StatsPanel stats={getStats(stats, statsKey)} onReset={() => reset(statsKey)} />
     </section>
   )
 }
 
-function RelativePitchSingFeedback({ feedback }: { feedback: RelativePitchSingResult | null }) {
+function RelativePitchSingFeedback({
+  feedback,
+  recordingUrl
+}: {
+  feedback: RelativePitchSingResult | null
+  recordingUrl: string | null
+}) {
   if (!feedback) return null
   return (
     <div className={`feedback ${feedback.correct ? 'correct' : 'wrong'}`} role="status">
@@ -1682,6 +1701,7 @@ function RelativePitchSingFeedback({ feedback }: { feedback: RelativePitchSingRe
       <span>正确序列：{feedback.correctAnswer}</span>
       <span>识别序列：{feedback.userAnswer}</span>
       <span>{feedback.explanation}</span>
+      {recordingUrl && <audio controls src={recordingUrl} aria-label="播放录音" />}
     </div>
   )
 }

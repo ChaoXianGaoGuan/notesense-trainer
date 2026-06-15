@@ -6,6 +6,11 @@ type FramePitch = {
   timeMs: number
 }
 
+export type InputAnalysisResult = {
+  events: SungPitchEvent[]
+  audioUrl: string | null
+}
+
 const MIN_STABLE_DURATION_MS = 160
 const SAME_NOTE_GAP_MS = 200
 const FRAME_INTERVAL_MS = 60
@@ -17,9 +22,12 @@ let source: MediaStreamAudioSourceNode | null = null
 let intervalId: number | null = null
 let recordingStartedAt = 0
 let frames: FramePitch[] = []
+let mediaRecorder: MediaRecorder | null = null
+let audioChunks: Blob[] = []
 
 export const inputAnalyzer = {
   async start(): Promise<void> {
+    await stopRecorder()
     await stop()
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error('当前浏览器不支持麦克风录音')
@@ -38,7 +46,18 @@ export const inputAnalyzer = {
     source = audioContext.createMediaStreamSource(mediaStream)
     source.connect(analyser)
     frames = []
+    audioChunks = []
     recordingStartedAt = performance.now()
+
+    if (typeof MediaRecorder !== 'undefined') {
+      mediaRecorder = new MediaRecorder(mediaStream)
+      mediaRecorder.addEventListener('dataavailable', (event) => {
+        if (event.data.size > 0) {
+          audioChunks.push(event.data)
+        }
+      })
+      mediaRecorder.start()
+    }
 
     intervalId = window.setInterval(() => {
       if (!analyser || !audioContext) return
@@ -56,10 +75,19 @@ export const inputAnalyzer = {
     }, FRAME_INTERVAL_MS)
   },
 
-  async stopAndAnalyze(): Promise<SungPitchEvent[]> {
+  async stopAndAnalyze(): Promise<InputAnalysisResult> {
     const capturedFrames = [...frames]
+    const audioUrl = await stopRecorder()
     await stop()
-    return framesToStableEvents(capturedFrames)
+    return {
+      events: framesToStableEvents(capturedFrames),
+      audioUrl
+    }
+  },
+
+  async cancel(): Promise<void> {
+    await stopRecorder()
+    await stop()
   }
 }
 
@@ -77,6 +105,25 @@ async function stop(): Promise<void> {
     await audioContext.close()
   }
   audioContext = null
+}
+
+async function stopRecorder(): Promise<string | null> {
+  if (!mediaRecorder) return null
+  const recorder = mediaRecorder
+  mediaRecorder = null
+
+  if (recorder.state !== 'inactive') {
+    await new Promise<void>((resolve) => {
+      recorder.addEventListener('stop', () => resolve(), { once: true })
+      recorder.stop()
+    })
+  }
+
+  if (audioChunks.length === 0) return null
+  const mimeType = recorder.mimeType || 'audio/webm'
+  const blob = new Blob(audioChunks, { type: mimeType })
+  audioChunks = []
+  return URL.createObjectURL(blob)
 }
 
 export function framesToStableEvents(framePitches: FramePitch[]): SungPitchEvent[] {
