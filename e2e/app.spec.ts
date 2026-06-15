@@ -82,6 +82,28 @@ test('each module renders and supports a basic answer flow', async ({ page }) =>
   await syncopationModule.getByRole('button', { name: '对比标准' }).click()
   await expect(syncopationModule.locator('.rhythm-cell.standard-active').first()).toBeVisible({ timeout: 5000 })
 
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: {
+        getUserMedia: () => Promise.reject(new Error('麦克风权限被拒绝'))
+      },
+      configurable: true
+    })
+  })
+  await page.reload()
+  await page.getByRole('button', { name: '相对音高模唱' }).click()
+  const relativePitchModule = page.getByTestId('module-relative-pitch-sing')
+  await expect(relativePitchModule).toBeVisible()
+  await expect(page.getByText('音量')).toBeVisible()
+  await expect(relativePitchModule.getByText('121')).toBeVisible()
+  await expect(relativePitchModule.getByText('1 = C')).toBeVisible()
+  await expect(relativePitchModule.getByRole('button', { name: '播放 do' })).toBeVisible()
+  await expect(relativePitchModule.getByRole('button', { name: '播放标准答案' })).toBeVisible()
+  await relativePitchModule.getByRole('button', { name: '开始录音' }).click()
+  await expect(relativePitchModule.getByText('麦克风权限被拒绝')).toBeVisible({ timeout: 7000 })
+  await relativePitchModule.getByRole('button', { name: '下一题' }).click()
+  await expect(relativePitchModule.getByText('131')).toBeVisible()
+
   await page.getByRole('button', { name: '调内级数和弦' }).click()
   const degreeModule = page.getByTestId('module-degree-chord')
   await expect(degreeModule).toBeVisible()

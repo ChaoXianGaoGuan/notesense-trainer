@@ -63,11 +63,15 @@ https://github.com/ChaoXianGaoGuan/notesense-trainer
 
    看简谱式或五线谱式节奏型，跟着节拍器用 `Space` 或屏幕按钮拍击。首版固定 4/4、一小节、十六分网格，支持 60/80/100 bpm 和 5 个难度：八分反拍、正反拍混合、十六分切分、附点训练、跨拍连音。默认输入校准为 `-140ms`，提示用户空格可能有约 140ms 延迟。该模块使用节拍器点击声，不显示钢琴/吉他音频设置。
 
-7. 调内级数和弦
+7. 相对音高模唱
+
+   固定 `1 = C`，根据 `121`、`12321` 等数字序列模唱。首版支持两个音到七个音、往上/往下/混合、按表顺序/随机出题。用户听参考 do 后用麦克风唱，程序只判断音高顺序，不判断节奏、力度或唱名发音。该模块显示钢琴/吉他音频设置，用于播放 do 和标准答案。
+
+8. 调内级数和弦
 
    给出大调和级数，用户用根音、升降号、和弦类型拼出具体和弦。
 
-8. 和弦所属大调
+9. 和弦所属大调
 
    给出三和弦三个音，用户多选所有包含该三和弦作为调内三和弦的大调。无匹配时选择“无符合大调”。
 
@@ -118,6 +122,12 @@ src/audio/engine.ts
 src/audio/metronome.ts
 ```
 
+相对音高模唱使用独立的麦克风输入分析接口：
+
+```text
+src/audio/input-analyzer.ts
+```
+
 ## localStorage 数据
 
 当前主要 key：
@@ -152,6 +162,7 @@ src/core/types.ts
 - `chord-quality:1/2/3/4`
 - `interval-speed:5/10:missing-top/missing-root/missing-interval/mixed`
 - `syncopation:1/2/3/4/5:60/80/100`
+- `relative-pitch-sing:2/3/4/5/6/7:up/down/mixed`
 - `degree-chord`
 - `triad-key-match`
 

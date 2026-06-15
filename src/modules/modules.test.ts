@@ -1,6 +1,12 @@
 import { buildDegreeChord, buildMajorScale, findMajorKeysForTriad } from '../core/major-keys'
 import { getNaturalNoteFromPitch } from '../core/notes'
 import {
+  buildRelativePitchPatterns,
+  evaluateRelativePitchAnswer,
+  relativePitchPatternLabel,
+  relativePitchPatternToNotes
+} from '../core/relative-pitch'
+import {
   buildComparisonEvents,
   buildRhythmDemoEvents,
   buildUserReplayEvents,
@@ -42,6 +48,11 @@ import {
   generateSyncopationQuestion,
   getSyncopationStatsKey
 } from './syncopation'
+import {
+  checkRelativePitchSingAnswer,
+  generateRelativePitchSingQuestion,
+  getRelativePitchSingStatsKey
+} from './relative-pitch-sing'
 
 describe('single-note trainer', () => {
   it('generates targets inside the selected difficulty', () => {
@@ -277,6 +288,61 @@ describe('syncopation trainer', () => {
   })
 })
 
+describe('relative pitch singing trainer', () => {
+  it('builds two-note upward patterns including octave 111', () => {
+    const patterns = buildRelativePitchPatterns(2, 'up')
+    expect(patterns.map(relativePitchPatternLabel)).toEqual(['121', '131', '141', '151', '161', '171', '111'])
+    expect(relativePitchPatternToNotes(patterns[0])).toEqual(['C4', 'D4', 'C4'])
+    expect(relativePitchPatternToNotes(patterns.at(-1)!)).toEqual(['C4', 'C5', 'C4'])
+  })
+
+  it('builds mirrored higher-difficulty and downward patterns', () => {
+    const upward = buildRelativePitchPatterns(3, 'up')
+    expect(upward.map(relativePitchPatternLabel)).toContain('12321')
+    expect(upward.map(relativePitchPatternLabel)).not.toContain('121')
+
+    const downward = buildRelativePitchPatterns(2, 'down')
+    expect(relativePitchPatternLabel(downward[0])).toBe('171')
+    expect(relativePitchPatternToNotes(downward[0])).toEqual(['C5', 'B4', 'C5'])
+    expect(relativePitchPatternToNotes(downward.at(-1)!)).toEqual(['C5', 'C4', 'C5'])
+  })
+
+  it('generates sequential questions and separates stats by difficulty and direction', () => {
+    const settings = { difficulty: 2, direction: 'up', order: 'sequential' } as const
+    const first = generateRelativePitchSingQuestion(settings)
+    const second = generateRelativePitchSingQuestion(settings, { previousQuestionKey: first.pattern.id })
+    expect(first.label).toBe('121')
+    expect(second.label).toBe('131')
+    expect(getRelativePitchSingStatsKey(2, 'up')).toBe('relative-pitch-sing:2:up')
+  })
+
+  it('judges sung pitch events by degree sequence and cents tolerance', () => {
+    const pattern = buildRelativePitchPatterns(2, 'up')[0]
+    expect(evaluateRelativePitchAnswer(pattern, [
+      { midi: 60, cents: 20, durationMs: 200 },
+      { midi: 62, cents: -35, durationMs: 200 },
+      { midi: 60, cents: 0, durationMs: 200 }
+    ]).correct).toBe(true)
+
+    expect(evaluateRelativePitchAnswer(pattern, [
+      { midi: 60, cents: 70, durationMs: 200 },
+      { midi: 62, cents: 0, durationMs: 200 },
+      { midi: 60, cents: 0, durationMs: 200 }
+    ]).correct).toBe(false)
+
+    expect(checkRelativePitchSingAnswer({
+      id: 'q',
+      pattern,
+      label: '121',
+      notes: relativePitchPatternToNotes(pattern)
+    }, [
+      { midi: 60, cents: 0, durationMs: 200 },
+      { midi: 64, cents: 0, durationMs: 200 },
+      { midi: 60, cents: 0, durationMs: 200 }
+    ]).correct).toBe(false)
+  })
+})
+
 describe('major key theory', () => {
   it('spells traditional major scales', () => {
     expect(buildMajorScale('C#').notes).toEqual(['C#', 'D#', 'E#', 'F#', 'G#', 'A#', 'B#'])
@@ -364,6 +430,18 @@ describe('state helpers', () => {
       bpm: 60,
       notation: 'jianpu',
       inputCalibrationMs: -140
+    })
+  })
+
+  it('fills relative pitch singing defaults for older preferences', () => {
+    const legacy = {
+      ...DEFAULT_PREFERENCES,
+      relativePitchSing: undefined
+    } as unknown as AppPreferences
+    expect(normalizePreferences(legacy).relativePitchSing).toEqual({
+      difficulty: 2,
+      direction: 'up',
+      order: 'sequential'
     })
   })
 

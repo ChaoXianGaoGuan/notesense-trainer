@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Dispatch, MutableRefObject, ReactNode, SetStateAction } from 'react'
 import { audioEngine } from '../audio/engine'
+import { inputAnalyzer } from '../audio/input-analyzer'
 import { metronome } from '../audio/metronome'
 import { CHORD_LABELS } from '../core/chords'
 import { INTERVAL_LABELS } from '../core/intervals'
@@ -55,6 +56,19 @@ import {
   type MelodyQuestion
 } from '../modules/melody'
 import {
+  RELATIVE_PITCH_SING_DIFFICULTIES,
+  RELATIVE_PITCH_SING_DIFFICULTY_LABELS,
+  RELATIVE_PITCH_SING_DIRECTIONS,
+  RELATIVE_PITCH_SING_DIRECTION_LABELS,
+  RELATIVE_PITCH_SING_ORDERS,
+  RELATIVE_PITCH_SING_ORDER_LABELS,
+  checkRelativePitchSingAnswer,
+  generateRelativePitchSingQuestion,
+  getRelativePitchSingStatsKey,
+  type RelativePitchSingQuestion,
+  type RelativePitchSingResult
+} from '../modules/relative-pitch-sing'
+import {
   SINGLE_NOTE_RANGES,
   buildSingleNoteTimedPlayback,
   checkSingleNoteAnswer,
@@ -105,6 +119,7 @@ const MODULES: Array<{ id: ModuleId; label: string }> = [
   { id: 'chord-quality', label: '和弦性质听辨' },
   { id: 'interval-speed', label: '根音冠音音程速算' },
   { id: 'syncopation', label: '切分节奏跟拍' },
+  { id: 'relative-pitch-sing', label: '相对音高模唱' },
   { id: 'degree-chord', label: '调内级数和弦' },
   { id: 'triad-key-match', label: '和弦所属大调' }
 ]
@@ -252,6 +267,17 @@ export function App() {
             stats={stats}
             settings={preferences.syncopation}
             updateSettings={(syncopation) => setPreferences((current) => ({ ...current, syncopation }))}
+            recordAnswer={recordModuleAnswer}
+            resetStats={resetModuleStats}
+          />
+        )}
+
+        {preferences.activeModule === 'relative-pitch-sing' && (
+          <RelativePitchSingTrainer
+            audioSettings={preferences.audio}
+            stats={stats}
+            settings={preferences.relativePitchSing}
+            updateSettings={(relativePitchSing) => setPreferences((current) => ({ ...current, relativePitchSing }))}
             recordAnswer={recordModuleAnswer}
             resetStats={resetModuleStats}
           />
@@ -1482,6 +1508,182 @@ function getRhythmCellMark(cell: SyncopationQuestion['cells'][number], status?: 
   if (cell === 'attack') return 'X'
   if (cell === 'hold') return '—'
   return '0'
+}
+
+type RelativePitchSingPhase = 'idle' | 'recording' | 'feedback'
+
+function RelativePitchSingTrainer({
+  audioSettings,
+  stats,
+  settings,
+  updateSettings,
+  recordAnswer: record,
+  resetStats: reset
+}: {
+  audioSettings: AudioSettings
+  stats: StatsState
+  settings: AppPreferences['relativePitchSing']
+  updateSettings: (settings: AppPreferences['relativePitchSing']) => void
+  recordAnswer: (key: StatsKey, correct: boolean) => void
+  resetStats: (key: StatsKey) => void
+}) {
+  const statsKey = getRelativePitchSingStatsKey(settings.difficulty, settings.direction)
+  const [question, setQuestion] = useState<RelativePitchSingQuestion>(() => generateRelativePitchSingQuestion(settings))
+  const [phase, setPhase] = useState<RelativePitchSingPhase>('idle')
+  const [feedback, setFeedback] = useState<RelativePitchSingResult | null>(null)
+  const [micMessage, setMicMessage] = useState('准备录音')
+  const recordingTimeoutRef = useRef<number | null>(null)
+
+  const clearRecordingTimer = useCallback(() => {
+    clearPendingTimeout(recordingTimeoutRef)
+  }, [])
+
+  const playDo = useCallback(() => {
+    void audioEngine.playNote(question.pattern.direction === 'up' ? 'C4' : 'C5', audioSettings)
+  }, [audioSettings, question.pattern.direction])
+
+  const playAnswer = useCallback(() => {
+    void audioEngine.playTimedSequence(
+      question.notes.map((note) => ({
+        note,
+        durationMs: audioSettings.durationMs,
+        gapAfterMs: 90
+      })),
+      audioSettings
+    )
+  }, [audioSettings, question.notes])
+
+  const finishRecording = useCallback(async () => {
+    clearRecordingTimer()
+    try {
+      const sungEvents = await inputAnalyzer.stopAndAnalyze()
+      const result = checkRelativePitchSingAnswer(question, sungEvents)
+      setFeedback(result)
+      setMicMessage(`识别到 ${result.detectedDegrees.length} 个稳定音`)
+      setPhase('feedback')
+      record(statsKey, result.correct)
+    } catch (error) {
+      setMicMessage(error instanceof Error ? error.message : '录音分析失败')
+      setPhase('idle')
+    }
+  }, [clearRecordingTimer, question, record, statsKey])
+
+  const startRecording = useCallback(async () => {
+    clearRecordingTimer()
+    setFeedback(null)
+    setMicMessage('请求麦克风权限')
+    try {
+      await audioEngine.playNote(question.pattern.direction === 'up' ? 'C4' : 'C5', audioSettings)
+      await inputAnalyzer.start()
+      setPhase('recording')
+      setMicMessage('录音中，唱完后可手动结束')
+      recordingTimeoutRef.current = window.setTimeout(() => {
+        void finishRecording()
+      }, 10000)
+    } catch (error) {
+      setPhase('idle')
+      setMicMessage(error instanceof Error ? error.message : '无法打开麦克风，请检查浏览器权限')
+    }
+  }, [audioSettings, clearRecordingTimer, finishRecording, question.pattern.direction])
+
+  const nextQuestion = useCallback(() => {
+    clearRecordingTimer()
+    setQuestion((current) =>
+      generateRelativePitchSingQuestion(settings, { previousQuestionKey: current.pattern.id })
+    )
+    setFeedback(null)
+    setPhase('idle')
+    setMicMessage('准备录音')
+  }, [clearRecordingTimer, settings])
+
+  useEffect(() => {
+    clearRecordingTimer()
+    setQuestion(generateRelativePitchSingQuestion(settings))
+    setFeedback(null)
+    setPhase('idle')
+    setMicMessage('准备录音')
+    return () => {
+      clearRecordingTimer()
+      void inputAnalyzer.stopAndAnalyze().catch(() => undefined)
+    }
+  }, [clearRecordingTimer, settings.difficulty, settings.direction, settings.order])
+
+  return (
+    <section className="module-panel" data-testid="module-relative-pitch-sing">
+      <ModuleHeader title="相对音高模唱" />
+      <div className="settings-row">
+        <SegmentedControl
+          label="难度"
+          value={String(settings.difficulty)}
+          options={RELATIVE_PITCH_SING_DIFFICULTIES.map((difficulty) => ({
+            value: String(difficulty),
+            label: RELATIVE_PITCH_SING_DIFFICULTY_LABELS[difficulty]
+          }))}
+          onChange={(value) =>
+            updateSettings({ ...settings, difficulty: Number(value) as AppPreferences['relativePitchSing']['difficulty'] })
+          }
+        />
+        <SegmentedControl
+          label="方向"
+          value={settings.direction}
+          options={RELATIVE_PITCH_SING_DIRECTIONS.map((direction) => ({
+            value: direction,
+            label: RELATIVE_PITCH_SING_DIRECTION_LABELS[direction]
+          }))}
+          onChange={(value) => updateSettings({ ...settings, direction: value as AppPreferences['relativePitchSing']['direction'] })}
+        />
+        <SegmentedControl
+          label="出题"
+          value={settings.order}
+          options={RELATIVE_PITCH_SING_ORDERS.map((order) => ({
+            value: order,
+            label: RELATIVE_PITCH_SING_ORDER_LABELS[order]
+          }))}
+          onChange={(value) => updateSettings({ ...settings, order: value as AppPreferences['relativePitchSing']['order'] })}
+        />
+      </div>
+      <div className="relative-pitch-prompt">
+        <span>{RELATIVE_PITCH_SING_DIRECTION_LABELS[question.pattern.direction]}</span>
+        <strong>{question.label}</strong>
+        <small>1 = C，{question.pattern.direction === 'up' ? '低音 1 为 C4' : '高音 1 为 C5'}</small>
+      </div>
+      <div className="syncopation-status">
+        <span>状态：{phase === 'recording' ? '录音中' : phase === 'feedback' ? '已判定' : '准备'}</span>
+        <span>麦克风：{micMessage}</span>
+      </div>
+      <div className="syncopation-actions">
+        <button type="button" onClick={playDo} disabled={phase === 'recording'}>
+          播放 do
+        </button>
+        <button type="button" className="primary" onClick={startRecording} disabled={phase === 'recording'}>
+          开始录音
+        </button>
+        <button type="button" onClick={() => void finishRecording()} disabled={phase !== 'recording'}>
+          结束并判定
+        </button>
+        <button type="button" onClick={playAnswer} disabled={phase === 'recording'}>
+          播放标准答案
+        </button>
+        <button type="button" onClick={nextQuestion} disabled={phase === 'recording'}>
+          下一题
+        </button>
+      </div>
+      <RelativePitchSingFeedback feedback={feedback} />
+      <StatsPanel stats={getStats(stats, statsKey)} onReset={() => reset(statsKey)} />
+    </section>
+  )
+}
+
+function RelativePitchSingFeedback({ feedback }: { feedback: RelativePitchSingResult | null }) {
+  if (!feedback) return null
+  return (
+    <div className={`feedback ${feedback.correct ? 'correct' : 'wrong'}`} role="status">
+      <strong>{feedback.correct ? '正确' : '错误'}</strong>
+      <span>正确序列：{feedback.correctAnswer}</span>
+      <span>识别序列：{feedback.userAnswer}</span>
+      <span>{feedback.explanation}</span>
+    </div>
+  )
 }
 
 function DegreeChordTrainer({

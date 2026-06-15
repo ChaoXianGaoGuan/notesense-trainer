@@ -2,6 +2,7 @@ import type { AudioSettings, Stats } from '../core/types'
 import type { ChordStage } from '../modules/chord-quality'
 import type { IntervalMode, IntervalTimeLimit } from '../modules/interval-speed'
 import type { MelodyLength, MelodyPlaybackMode } from '../modules/melody'
+import type { RelativePitchSingDifficulty, RelativePitchSingDirection, RelativePitchSingOrder } from '../modules/relative-pitch-sing'
 import type { ListenPlaybackMode, SingleNoteDifficulty } from '../modules/single-note'
 import type { SyncopationBpm, SyncopationDifficulty, SyncopationNotation } from '../modules/syncopation'
 
@@ -12,6 +13,7 @@ export type ModuleId =
   | 'chord-quality'
   | 'interval-speed'
   | 'syncopation'
+  | 'relative-pitch-sing'
   | 'degree-chord'
   | 'triad-key-match'
 
@@ -39,6 +41,11 @@ export type AppPreferences = {
     bpm: SyncopationBpm
     notation: SyncopationNotation
     inputCalibrationMs: number
+  }
+  relativePitchSing: {
+    difficulty: RelativePitchSingDifficulty
+    direction: RelativePitchSingDirection
+    order: RelativePitchSingOrder
   }
 }
 
@@ -76,6 +83,11 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
     bpm: 60,
     notation: 'jianpu',
     inputCalibrationMs: -140
+  },
+  relativePitchSing: {
+    difficulty: 2,
+    direction: 'up',
+    order: 'sequential'
   }
 }
 
@@ -126,6 +138,19 @@ export function normalizePreferences(preferences: AppPreferences): AppPreference
       inputCalibrationMs: isSupportedSyncopationCalibration(preferences.syncopation?.inputCalibrationMs)
         ? preferences.syncopation.inputCalibrationMs
         : DEFAULT_PREFERENCES.syncopation.inputCalibrationMs
+    },
+    relativePitchSing: {
+      ...DEFAULT_PREFERENCES.relativePitchSing,
+      ...preferences.relativePitchSing,
+      difficulty: isSupportedRelativePitchSingDifficulty(preferences.relativePitchSing?.difficulty)
+        ? preferences.relativePitchSing.difficulty
+        : DEFAULT_PREFERENCES.relativePitchSing.difficulty,
+      direction: isSupportedRelativePitchSingDirection(preferences.relativePitchSing?.direction)
+        ? preferences.relativePitchSing.direction
+        : DEFAULT_PREFERENCES.relativePitchSing.direction,
+      order: isSupportedRelativePitchSingOrder(preferences.relativePitchSing?.order)
+        ? preferences.relativePitchSing.order
+        : DEFAULT_PREFERENCES.relativePitchSing.order
     }
   }
 }
@@ -148,4 +173,16 @@ function isSupportedSyncopationNotation(value: unknown): value is SyncopationNot
 
 function isSupportedSyncopationCalibration(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= -200 && value <= 200
+}
+
+function isSupportedRelativePitchSingDifficulty(value: unknown): value is RelativePitchSingDifficulty {
+  return value === 2 || value === 3 || value === 4 || value === 5 || value === 6 || value === 7
+}
+
+function isSupportedRelativePitchSingDirection(value: unknown): value is RelativePitchSingDirection {
+  return value === 'up' || value === 'down' || value === 'mixed'
+}
+
+function isSupportedRelativePitchSingOrder(value: unknown): value is RelativePitchSingOrder {
+  return value === 'sequential' || value === 'random'
 }

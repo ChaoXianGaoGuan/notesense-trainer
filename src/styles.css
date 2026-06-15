@@ -612,6 +612,28 @@ button.primary {
   font-weight: 800;
 }
 
+.relative-pitch-prompt {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  padding: 24px 16px;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.relative-pitch-prompt span,
+.relative-pitch-prompt small {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.relative-pitch-prompt strong {
+  color: #0f172a;
+  font-size: clamp(44px, 10vw, 96px);
+  line-height: 1;
+}
+
 @media (max-width: 860px) {
   .app-shell {
     width: min(100% - 20px, 1180px);
