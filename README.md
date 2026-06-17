@@ -35,6 +35,7 @@ https://chaoxiangaoguan.github.io/notesense-trainer/
 - Vite：前端构建工具。
 - React：界面和交互。
 - Tone.js：Web Audio 播放和采样器封装。
+- 自定义 SVG 简谱渲染器：切分节奏跟拍的教学型简谱谱面。
 - VexFlow：五线谱节奏型渲染。
 - vite-plugin-pwa：生成 manifest 和 service worker。
 - Vitest：单元测试。
@@ -77,6 +78,8 @@ e2e/         # Playwright 端到端测试
 项目按“核心逻辑、业务模块、音频引擎、状态、界面”分层。
 
 `core/` 只放纯函数，例如音名转换、音程计算、和弦构造。它不引用 React、不操作音频、不读写 localStorage。这样音乐理论相关逻辑可以独立测试。
+
+切分节奏的简谱显示也有独立核心逻辑：`src/core/jianpu-rhythm.ts` 负责把节奏格转换成教学型简谱 layout，包括小节、拍点、符号位置、减时线、附点、三连音标记和反馈高亮。React 只渲染 layout 结果。
 
 `modules/` 负责每个训练模式的业务规则，例如生成题目、构造播放序列、检查答案、决定统计 key。模块层仍然尽量不直接操作浏览器 API。
 
