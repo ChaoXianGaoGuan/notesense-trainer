@@ -12,8 +12,10 @@ import {
   buildRhythmDemoEvents,
   buildUserReplayEvents,
   evaluateRhythmHits,
+  getTicksPerBar,
   getTargetTimesMs,
   getTemplatesForDifficulty,
+  getTotalTicks,
   rhythmToNotationEvents
 } from '../core/rhythm'
 import { DEFAULT_PREFERENCES, normalizePreferences, type AppPreferences } from '../state/defaults'
@@ -168,111 +170,110 @@ describe('interval trainer', () => {
 })
 
 describe('syncopation trainer', () => {
-  it('uses legal 16-cell rhythm templates for each difficulty', () => {
-    for (const difficulty of [1, 2, 3, 4, 5] as const) {
-      const templates = getTemplatesForDifficulty(difficulty)
-      expect(templates.length).toBeGreaterThan(0)
-      for (const template of templates) {
-        expect(template.cells).toHaveLength(16)
-        expect(template.cells.filter((cell) => cell === 'attack').length).toBeGreaterThan(0)
-        expect(rhythmToNotationEvents(template.cells).reduce((sum, event) => sum + event.durationCells, 0)).toBe(16)
+  it('generates four-bar templates for each meter and difficulty', () => {
+    for (const meter of ['2/4', '3/4', '4/4'] as const) {
+      for (const difficulty of [1, 2, 3, 4, 5, 6, 7] as const) {
+        const templates = getTemplatesForDifficulty(difficulty, meter)
+        expect(templates.length).toBeGreaterThan(0)
+        for (const template of templates) {
+          expect(template.cells).toHaveLength(getTotalTicks(meter))
+          expect(template.cells.filter((cell) => cell === 'attack').length).toBeGreaterThan(0)
+          expect(template.cells).toContain('rest')
+          expect(rhythmToNotationEvents(template.cells).reduce((sum, event) => sum + event.durationTicks, 0)).toBe(getTotalTicks(meter))
+        }
       }
     }
   })
 
   it('generates difficulty-specific questions and avoids immediate repeats', () => {
-    const first = generateSyncopationQuestion(1)
-    const second = generateSyncopationQuestion(1, { previousQuestionKey: first.templateId })
-    expect(getTemplatesForDifficulty(1).map((template) => template.id)).toContain(first.templateId)
+    const settings = { difficulty: 1, bpm: 60, meter: '4/4', notation: 'jianpu', inputCalibrationMs: -140 } as const
+    const first = generateSyncopationQuestion(settings)
+    const second = generateSyncopationQuestion(settings, { previousQuestionKey: first.templateId })
+    expect(getTemplatesForDifficulty(1, '4/4').map((template) => template.id)).toContain(first.templateId)
     expect(second.templateId).not.toBe(first.templateId)
-    expect(generateSyncopationQuestion(5).cells).toContain('hold')
+    expect(generateSyncopationQuestion({ ...settings, difficulty: 7 }).description).toContain('三连音')
   })
 
-  it('orders syncopation difficulties from offbeats to dotted and tied syncopation', () => {
-    expect(getTemplatesForDifficulty(1).some((template) => template.cells.some((cell, index) => cell === 'attack' && index % 4 === 2))).toBe(true)
-    expect(getTemplatesForDifficulty(2).some((template) => template.cells.some((cell, index) => cell === 'attack' && index % 4 === 0))).toBe(true)
-    expect(getTemplatesForDifficulty(3).some((template) => template.cells.some((cell, index) => cell === 'attack' && index % 2 === 1))).toBe(true)
-    expect(getTemplatesForDifficulty(4).some((template) => rhythmToNotationEvents(template.cells).some((event) => event.durationCells === 3))).toBe(true)
-    expect(getTemplatesForDifficulty(5).some((template) => template.cells.includes('hold'))).toBe(true)
+  it('uses cumulative rhythm material through seven difficulties', () => {
+    expect(getTemplatesForDifficulty(1, '4/4').every((template) => rhythmToNotationEvents(template.cells).every((event) => event.durationTicks % 12 === 0))).toBe(true)
+    expect(getTemplatesForDifficulty(2, '4/4').some((template) => rhythmToNotationEvents(template.cells).some((event) => event.durationTicks === 6))).toBe(true)
+    expect(getTemplatesForDifficulty(3, '4/4').some((template) => rhythmToNotationEvents(template.cells).some((event) => event.durationTicks === 3))).toBe(true)
+    expect(getTemplatesForDifficulty(5, '4/4').some((template) => rhythmToNotationEvents(template.cells).some((event) => event.durationTicks === 9))).toBe(true)
+    expect(getTemplatesForDifficulty(6, '4/4').some((template) => rhythmToNotationEvents(template.cells).some((event) => event.durationTicks === 6))).toBe(true)
+    expect(getTemplatesForDifficulty(7, '4/4').some((template) => rhythmToNotationEvents(template.cells).some((event) => event.durationTicks === 4 && event.tuplet === 3))).toBe(true)
   })
 
-  it('converts bpm to target times', () => {
-    const question = generateSyncopationQuestion(1)
+  it('keeps small syncopation inside bar boundaries and triplets on third-beat ticks', () => {
+    const ticksPerBar = getTicksPerBar('4/4')
+    const smallSyncopationEvents = getTemplatesForDifficulty(6, '4/4').flatMap((template) => rhythmToNotationEvents(template.cells))
+    expect(smallSyncopationEvents.some((event) => event.durationTicks === 12 && event.start % ticksPerBar <= ticksPerBar - 12)).toBe(true)
+
+    const tripletEvents = getTemplatesForDifficulty(7, '4/4').flatMap((template) => rhythmToNotationEvents(template.cells)).filter((event) => event.tuplet === 3)
+    expect(tripletEvents.length).toBeGreaterThan(0)
+    expect(tripletEvents.every((event) => event.start % 4 === 0)).toBe(true)
+  })
+
+  it('converts bpm to target times on the tick timeline', () => {
+    const question = generateSyncopationQuestion({ difficulty: 1, bpm: 60, meter: '4/4', notation: 'jianpu', inputCalibrationMs: -140 })
     const targets = getTargetTimesMs(question.cells, 60)
-    expect(targets.every((time) => time % 250 === 0)).toBe(true)
+    expect(targets.every((time) => time % 1000 === 0)).toBe(true)
   })
 
-  it('builds standard rhythm demo events for one bar', () => {
-    const question = generateSyncopationQuestion(1)
+  it('builds standard rhythm demo events for four bars', () => {
+    const question = generateSyncopationQuestion({ difficulty: 1, bpm: 60, meter: '2/4', notation: 'jianpu', inputCalibrationMs: -140 })
     const events = buildRhythmDemoEvents(question.cells, 60)
-    expect(events).toHaveLength(16)
+    expect(events).toHaveLength(getTotalTicks('2/4'))
     expect(events[0]).toEqual({ index: 0, timeMs: 0, attack: question.cells[0] === 'attack' })
-    expect(events.at(-1)?.timeMs).toBe(3750)
     expect(events.filter((event) => event.attack).map((event) => event.index)).toEqual(
       question.cells.flatMap((cell, index) => (cell === 'attack' ? [index] : []))
     )
   })
 
-  it('maps user replay and comparison events to visual cells', () => {
-    const question = {
-      id: 'q',
-      templateId: 'test',
-      label: 'test',
-      cells: ['attack', 'rest', 'attack', 'hold', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest']
-    } as const
+  it('maps user replay and comparison events to visual ticks', () => {
+    const cells = ['attack', ...Array(11).fill('hold'), 'attack', ...Array(11).fill('hold')] as const
 
     expect(buildUserReplayEvents([], 60)).toEqual([])
-    expect(buildUserReplayEvents([0, 625], 60)).toEqual([
+    expect(buildUserReplayEvents([0, 1000], 60, cells.length)).toEqual([
       { index: 0, timeMs: 0, kind: 'user' },
-      { index: 3, timeMs: 625, kind: 'user' }
+      { index: 12, timeMs: 1000, kind: 'user' }
     ])
 
-    const comparison = buildComparisonEvents(question.cells, 60, [625])
+    const comparison = buildComparisonEvents(cells, 60, [1000])
     expect(comparison).toContainEqual({ index: 0, timeMs: 0, kind: 'standard' })
-    expect(comparison).toContainEqual({ index: 2, timeMs: 500, kind: 'standard' })
-    expect(comparison).toContainEqual({ index: 3, timeMs: 625, kind: 'user' })
+    expect(comparison).toContainEqual({ index: 12, timeMs: 1000, kind: 'standard' })
+    expect(comparison).toContainEqual({ index: 12, timeMs: 1000, kind: 'user' })
   })
 
   it('judges hits, misses, early, late, and extras', () => {
-    const question = {
-      id: 'q',
-      templateId: 'test',
-      label: 'test',
-      cells: ['attack', 'rest', 'rest', 'rest', 'attack', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest']
-    } as const
+    const cells = ['attack', ...Array(11).fill('hold'), 'attack', ...Array(11).fill('hold'), ...Array(12).fill('rest')] as const
 
-    expect(evaluateRhythmHits(question.cells, 60, [0, 1000]).correct).toBe(true)
+    expect(evaluateRhythmHits(cells, 60, [0, 1000]).correct).toBe(true)
 
-    const missed = evaluateRhythmHits(question.cells, 60, [0])
+    const missed = evaluateRhythmHits(cells, 60, [0])
     expect(missed.correct).toBe(false)
     expect(missed.targets.at(1)?.status).toBe('missed')
 
-    const earlyLateExtra = evaluateRhythmHits(question.cells, 60, [-130, 1130, 1700])
+    const earlyLateExtra = evaluateRhythmHits(cells, 60, [-130, 1130, 2600])
     expect(earlyLateExtra.targets[0].status).toBe('early')
     expect(earlyLateExtra.targets[1].status).toBe('late')
     expect(earlyLateExtra.extras).toHaveLength(1)
   })
 
   it('reports near target taps as early or late instead of extra', () => {
-    const question = {
-      id: 'q',
-      templateId: 'test',
-      label: 'test',
-      cells: ['rest', 'rest', 'attack', 'hold', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest']
-    } as const
+    const cells = [...Array(12).fill('rest'), 'attack', ...Array(11).fill('hold')] as const
 
-    const result = evaluateRhythmHits(question.cells, 60, [625])
+    const result = evaluateRhythmHits(cells, 60, [1130])
     expect(result.correct).toBe(false)
     expect(result.targets[0].status).toBe('late')
     expect(result.extras).toEqual([])
   })
 
-  it('returns answer feedback and stats key by difficulty and bpm', () => {
-    const question = generateSyncopationQuestion(2)
+  it('returns answer feedback and stats key by difficulty, bpm, and meter', () => {
+    const question = generateSyncopationQuestion({ difficulty: 2, bpm: 80, meter: '3/4', notation: 'jianpu', inputCalibrationMs: -140 })
     const result = checkSyncopationAnswer(question, 80, [])
     expect(result.correct).toBe(false)
     expect(result.explanation).toContain('漏拍')
-    expect(getSyncopationStatsKey(5, 100)).toBe('syncopation:5:100')
+    expect(getSyncopationStatsKey(7, 100, '2/4')).toBe('syncopation:7:100:2/4')
   })
 
   it('applies input calibration to judgement and replay event timing', () => {
@@ -280,7 +281,9 @@ describe('syncopation trainer', () => {
       id: 'q',
       templateId: 'test',
       label: 'test',
-      cells: ['attack', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest']
+      description: 'test',
+      meter: '4/4',
+      cells: ['attack', ...Array(11).fill('hold')]
     } as const
 
     expect(checkSyncopationAnswer(question, 60, [140]).correct).toBe(false)
@@ -460,6 +463,7 @@ describe('state helpers', () => {
     expect(normalizePreferences(legacy).syncopation).toEqual({
       difficulty: 1,
       bpm: 60,
+      meter: '4/4',
       notation: 'jianpu',
       inputCalibrationMs: -140
     })
@@ -478,12 +482,14 @@ describe('state helpers', () => {
   })
 
   it('normalizes syncopation difficulty and input calibration', () => {
-    expect(normalizePreferences({ ...DEFAULT_PREFERENCES, syncopation: { difficulty: 5, bpm: 60, notation: 'jianpu', inputCalibrationMs: 200 } }).syncopation).toMatchObject({
-      difficulty: 5,
+    expect(normalizePreferences({ ...DEFAULT_PREFERENCES, syncopation: { difficulty: 7, bpm: 60, meter: '2/4', notation: 'jianpu', inputCalibrationMs: 200 } }).syncopation).toMatchObject({
+      difficulty: 7,
+      meter: '2/4',
       inputCalibrationMs: 200
     })
-    expect(normalizePreferences({ ...DEFAULT_PREFERENCES, syncopation: { difficulty: 9, bpm: 60, notation: 'jianpu', inputCalibrationMs: 220 } as never }).syncopation).toMatchObject({
+    expect(normalizePreferences({ ...DEFAULT_PREFERENCES, syncopation: { difficulty: 9, bpm: 60, meter: '6/8', notation: 'jianpu', inputCalibrationMs: 220 } as never }).syncopation).toMatchObject({
       difficulty: 1,
+      meter: '4/4',
       inputCalibrationMs: -140
     })
   })

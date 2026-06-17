@@ -4,7 +4,7 @@ import type { IntervalMode, IntervalTimeLimit } from '../modules/interval-speed'
 import type { MelodyLength, MelodyPlaybackMode } from '../modules/melody'
 import type { RelativePitchSingDifficulty, RelativePitchSingDirection, RelativePitchSingOrder } from '../modules/relative-pitch-sing'
 import type { ListenPlaybackMode, SingleNoteDifficulty } from '../modules/single-note'
-import type { SyncopationBpm, SyncopationDifficulty, SyncopationNotation } from '../modules/syncopation'
+import type { SyncopationBpm, SyncopationDifficulty, SyncopationMeter, SyncopationNotation } from '../modules/syncopation'
 
 export type ModuleId =
   | 'solfege'
@@ -39,6 +39,7 @@ export type AppPreferences = {
   syncopation: {
     difficulty: SyncopationDifficulty
     bpm: SyncopationBpm
+    meter: SyncopationMeter
     notation: SyncopationNotation
     inputCalibrationMs: number
   }
@@ -81,6 +82,7 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
   syncopation: {
     difficulty: 1,
     bpm: 60,
+    meter: '4/4',
     notation: 'jianpu',
     inputCalibrationMs: -140
   },
@@ -132,6 +134,9 @@ export function normalizePreferences(preferences: AppPreferences): AppPreference
       bpm: isSupportedSyncopationBpm(preferences.syncopation?.bpm)
         ? preferences.syncopation.bpm
         : DEFAULT_PREFERENCES.syncopation.bpm,
+      meter: isSupportedSyncopationMeter(preferences.syncopation?.meter)
+        ? preferences.syncopation.meter
+        : DEFAULT_PREFERENCES.syncopation.meter,
       notation: isSupportedSyncopationNotation(preferences.syncopation?.notation)
         ? preferences.syncopation.notation
         : DEFAULT_PREFERENCES.syncopation.notation,
@@ -160,11 +165,15 @@ function isSupportedIntervalMode(value: unknown): value is IntervalMode {
 }
 
 function isSupportedSyncopationDifficulty(value: unknown): value is SyncopationDifficulty {
-  return value === 1 || value === 2 || value === 3 || value === 4 || value === 5
+  return value === 1 || value === 2 || value === 3 || value === 4 || value === 5 || value === 6 || value === 7
 }
 
 function isSupportedSyncopationBpm(value: unknown): value is SyncopationBpm {
   return value === 60 || value === 80 || value === 100
+}
+
+function isSupportedSyncopationMeter(value: unknown): value is SyncopationMeter {
+  return value === '2/4' || value === '3/4' || value === '4/4'
 }
 
 function isSupportedSyncopationNotation(value: unknown): value is SyncopationNotation {

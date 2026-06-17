@@ -2,31 +2,37 @@ import type { AnswerResult, GenerationContext, StatsKey } from '../core/types'
 import {
   RHYTHM_BPM_OPTIONS,
   RHYTHM_DIFFICULTIES,
+  RHYTHM_METERS,
   evaluateRhythmHits,
-  getBarDurationMs,
+  getRhythmDurationMs,
   getTemplatesForDifficulty,
   type RhythmBpm,
   type RhythmDifficulty,
   type RhythmEvaluation,
   type RhythmGrid,
+  type RhythmMeter,
   type RhythmNotation
 } from '../core/rhythm'
 import { randomItem } from '../core/random'
 
 export type SyncopationDifficulty = RhythmDifficulty
 export type SyncopationBpm = RhythmBpm
+export type SyncopationMeter = RhythmMeter
 export type SyncopationNotation = RhythmNotation
 
 export type SyncopationQuestion = {
   id: string
   templateId: string
   label: string
+  description: string
+  meter: SyncopationMeter
   cells: RhythmGrid
 }
 
 export type SyncopationSettings = {
   difficulty: SyncopationDifficulty
   bpm: SyncopationBpm
+  meter: SyncopationMeter
   notation: SyncopationNotation
   inputCalibrationMs: number
 }
@@ -37,13 +43,16 @@ export type SyncopationResult = AnswerResult & {
 
 export const SYNCOPATION_DIFFICULTIES = RHYTHM_DIFFICULTIES
 export const SYNCOPATION_BPM_OPTIONS = RHYTHM_BPM_OPTIONS
+export const SYNCOPATION_METER_OPTIONS = RHYTHM_METERS
 
 export const SYNCOPATION_DIFFICULTY_LABELS: Record<SyncopationDifficulty, string> = {
-  1: '八分反拍',
-  2: '正反拍混合',
-  3: '十六分切分',
-  4: '附点训练',
-  5: '跨拍连音'
+  1: '四分音符',
+  2: '二八节奏',
+  3: '四十六节奏',
+  4: '前八后十六/前十六后八',
+  5: '前附点/后附点',
+  6: '小切分',
+  7: '三连音'
 }
 
 export const SYNCOPATION_NOTATION_LABELS: Record<SyncopationNotation, string> = {
@@ -52,10 +61,10 @@ export const SYNCOPATION_NOTATION_LABELS: Record<SyncopationNotation, string> = 
 }
 
 export function generateSyncopationQuestion(
-  difficulty: SyncopationDifficulty,
+  settings: SyncopationSettings,
   context: GenerationContext = {}
 ): SyncopationQuestion {
-  const templates = getTemplatesForDifficulty(difficulty)
+  const templates = getTemplatesForDifficulty(settings.difficulty, settings.meter)
   const candidates =
     templates.length > 1 && context.previousQuestionKey
       ? templates.filter((template) => template.id !== context.previousQuestionKey)
@@ -65,6 +74,8 @@ export function generateSyncopationQuestion(
     id: `${template.id}-${Math.random().toString(36).slice(2)}`,
     templateId: template.id,
     label: template.label,
+    description: template.description,
+    meter: template.meter,
     cells: template.cells
   }
 }
@@ -88,12 +99,16 @@ export function checkSyncopationAnswer(
   }
 }
 
-export function getSyncopationStatsKey(difficulty: SyncopationDifficulty, bpm: SyncopationBpm): StatsKey {
-  return `syncopation:${difficulty}:${bpm}`
+export function getSyncopationStatsKey(
+  difficulty: SyncopationDifficulty,
+  bpm: SyncopationBpm,
+  meter: SyncopationMeter
+): StatsKey {
+  return `syncopation:${difficulty}:${bpm}:${meter}`
 }
 
-export function getSyncopationBarDurationMs(bpm: SyncopationBpm): number {
-  return getBarDurationMs(bpm)
+export function getSyncopationBarDurationMs(bpm: SyncopationBpm, meter: SyncopationMeter): number {
+  return getRhythmDurationMs(bpm, meter)
 }
 
 function formatSyncopationExplanation(evaluation: RhythmEvaluation): string {

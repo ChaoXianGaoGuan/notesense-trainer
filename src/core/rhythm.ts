@@ -1,13 +1,16 @@
 export type RhythmCell = 'attack' | 'hold' | 'rest'
 export type RhythmGrid = readonly RhythmCell[]
-export type RhythmDifficulty = 1 | 2 | 3 | 4 | 5
+export type RhythmDifficulty = 1 | 2 | 3 | 4 | 5 | 6 | 7
 export type RhythmBpm = 60 | 80 | 100
+export type RhythmMeter = '2/4' | '3/4' | '4/4'
 export type RhythmNotation = 'jianpu' | 'staff'
 
 export type RhythmTemplate = {
   id: string
   difficulty: RhythmDifficulty
+  meter: RhythmMeter
   label: string
+  description: string
   cells: RhythmGrid
 }
 
@@ -37,7 +40,8 @@ export type RhythmEvaluation = {
 export type RhythmNotationEvent = {
   kind: 'note' | 'rest'
   start: number
-  durationCells: 1 | 2 | 3 | 4
+  durationTicks: number
+  tuplet?: 3
 }
 
 export type RhythmDemoEvent = {
@@ -52,197 +56,119 @@ export type RhythmReplayEvent = {
   kind: 'standard' | 'user'
 }
 
-const CELLS_PER_BAR = 16
+type RhythmUnit = {
+  kind: 'note' | 'rest'
+  durationTicks: number
+  label: string
+  difficulty: RhythmDifficulty
+  tuplet?: 3
+}
+
+const TICKS_PER_QUARTER = 12
+const BARS_PER_QUESTION = 4
 
 export const RHYTHM_BPM_OPTIONS: RhythmBpm[] = [60, 80, 100]
-export const RHYTHM_DIFFICULTIES: RhythmDifficulty[] = [1, 2, 3, 4, 5]
+export const RHYTHM_METERS: RhythmMeter[] = ['2/4', '3/4', '4/4']
+export const RHYTHM_DIFFICULTIES: RhythmDifficulty[] = [1, 2, 3, 4, 5, 6, 7]
 
-export const RHYTHM_TEMPLATES: RhythmTemplate[] = [
-  {
-    id: 'offbeat-eighths-a',
-    difficulty: 1,
-    label: '八分反拍',
-    cells: cellsFromEvents([
-      ['rest', 2],
-      ['note', 2],
-      ['rest', 2],
-      ['note', 2],
-      ['rest', 2],
-      ['note', 2],
-      ['rest', 2],
-      ['note', 2]
-    ])
-  },
-  {
-    id: 'offbeat-eighths-b',
-    difficulty: 1,
-    label: '八分反拍变化',
-    cells: cellsFromEvents([
-      ['rest', 2],
-      ['note', 2],
-      ['rest', 4],
-      ['note', 2],
-      ['rest', 2],
-      ['note', 2],
-      ['rest', 2]
-    ])
-  },
-  {
-    id: 'mixed-eighths-a',
-    difficulty: 2,
-    label: '正反拍交替',
-    cells: cellsFromEvents([
-      ['note', 2],
-      ['rest', 2],
-      ['rest', 2],
-      ['note', 2],
-      ['note', 2],
-      ['rest', 2],
-      ['rest', 2],
-      ['note', 2]
-    ])
-  },
-  {
-    id: 'mixed-eighths-b',
-    difficulty: 2,
-    label: '正反拍混合',
-    cells: cellsFromEvents([
-      ['note', 2],
-      ['note', 4],
-      ['rest', 2],
-      ['rest', 2],
-      ['note', 2],
-      ['note', 2],
-      ['rest', 2]
-    ])
-  },
-  {
-    id: 'sixteenth-syncopation-a',
-    difficulty: 3,
-    label: '十六分切分',
-    cells: cellsFromEvents([
-      ['note', 1],
-      ['rest', 1],
-      ['note', 1],
-      ['rest', 1],
-      ['rest', 1],
-      ['note', 1],
-      ['rest', 1],
-      ['note', 1],
-      ['note', 2],
-      ['rest', 2],
-      ['rest', 1],
-      ['note', 1],
-      ['rest', 2]
-    ])
-  },
-  {
-    id: 'sixteenth-syncopation-b',
-    difficulty: 3,
-    label: '十六分反拍',
-    cells: cellsFromEvents([
-      ['rest', 1],
-      ['note', 1],
-      ['rest', 2],
-      ['note', 1],
-      ['rest', 1],
-      ['note', 2],
-      ['rest', 2],
-      ['note', 1],
-      ['rest', 1],
-      ['note', 1],
-      ['rest', 1],
-      ['note', 2]
-    ])
-  },
-  {
-    id: 'dotted-syncopation-a',
-    difficulty: 4,
-    label: '附点八分',
-    cells: cellsFromEvents([
-      ['note', 3],
-      ['note', 1],
-      ['rest', 2],
-      ['note', 2],
-      ['note', 3],
-      ['note', 1],
-      ['rest', 4]
-    ])
-  },
-  {
-    id: 'dotted-syncopation-b',
-    difficulty: 4,
-    label: '附点切分',
-    cells: cellsFromEvents([
-      ['rest', 1],
-      ['note', 3],
-      ['note', 2],
-      ['rest', 2],
-      ['note', 3],
-      ['note', 1],
-      ['note', 2],
-      ['rest', 2]
-    ])
-  },
-  {
-    id: 'tied-across-beat-a',
-    difficulty: 5,
-    label: '跨拍延音',
-    cells: cellsFromEvents([
-      ['note', 2],
-      ['note', 4],
-      ['rest', 2],
-      ['note', 1],
-      ['rest', 1],
-      ['note', 2],
-      ['note', 4]
-    ])
-  },
-  {
-    id: 'tied-across-beat-b',
-    difficulty: 5,
-    label: '跨强拍切分',
-    cells: cellsFromEvents([
-      ['rest', 2],
-      ['note', 4],
-      ['note', 2],
-      ['rest', 2],
-      ['note', 4],
-      ['rest', 2]
-    ])
-  }
+export const RHYTHM_DIFFICULTY_DESCRIPTIONS: Record<RhythmDifficulty, string> = {
+  1: '四分音符与四分休止符',
+  2: '二八节奏，可混入四分音符与休止符',
+  3: '四十六节奏，可混入之前节奏',
+  4: '前八后十六、前十六后八，可混入之前节奏',
+  5: '前附点、后附点，可混入之前节奏',
+  6: '小切分，可混入之前节奏',
+  7: '三连音，可混入之前节奏'
+}
+
+const UNITS: RhythmUnit[] = [
+  { kind: 'note', durationTicks: 12, label: '四分音符', difficulty: 1 },
+  { kind: 'rest', durationTicks: 12, label: '四分休止', difficulty: 1 },
+  { kind: 'note', durationTicks: 6, label: '八分音符', difficulty: 2 },
+  { kind: 'rest', durationTicks: 6, label: '八分休止', difficulty: 2 },
+  { kind: 'note', durationTicks: 3, label: '十六分音符', difficulty: 3 },
+  { kind: 'rest', durationTicks: 3, label: '十六分休止', difficulty: 3 },
+  { kind: 'note', durationTicks: 9, label: '附点八分', difficulty: 5 },
+  { kind: 'note', durationTicks: 4, label: '三连音', difficulty: 7, tuplet: 3 }
 ]
 
-export function cellsFromEvents(events: Array<['note' | 'rest', 1 | 2 | 3 | 4]>): RhythmCell[] {
+const PATTERN_LIBRARY: Array<{ id: string; difficulty: RhythmDifficulty; label: string; units: RhythmUnit[] }> = [
+  { id: 'quarter-note', difficulty: 1, label: '四分音符', units: [unit('四分音符')] },
+  { id: 'quarter-rest', difficulty: 1, label: '四分休止', units: [unit('四分休止')] },
+  { id: 'two-eighths', difficulty: 2, label: '二八节奏', units: [unit('八分音符'), unit('八分音符')] },
+  { id: 'four-sixteenths', difficulty: 3, label: '四十六节奏', units: [unit('十六分音符'), unit('十六分音符'), unit('十六分音符'), unit('十六分音符')] },
+  { id: 'eighth-two-sixteenths', difficulty: 4, label: '前八后十六', units: [unit('八分音符'), unit('十六分音符'), unit('十六分音符')] },
+  { id: 'two-sixteenths-eighth', difficulty: 4, label: '前十六后八', units: [unit('十六分音符'), unit('十六分音符'), unit('八分音符')] },
+  { id: 'front-dotted', difficulty: 5, label: '前附点', units: [unit('附点八分'), unit('十六分音符')] },
+  { id: 'back-dotted', difficulty: 5, label: '后附点', units: [unit('十六分音符'), unit('附点八分')] },
+  { id: 'small-syncopation', difficulty: 6, label: '小切分', units: [unit('八分音符'), unit('四分音符'), unit('八分音符')] },
+  { id: 'eighth-triplet', difficulty: 7, label: '三连音', units: [unit('三连音'), unit('三连音'), unit('三连音')] }
+]
+
+export function getTicksPerBeat(): number {
+  return TICKS_PER_QUARTER
+}
+
+export function getBeatsPerBar(meter: RhythmMeter): 2 | 3 | 4 {
+  return Number(meter.split('/')[0]) as 2 | 3 | 4
+}
+
+export function getTicksPerBar(meter: RhythmMeter): number {
+  return getBeatsPerBar(meter) * TICKS_PER_QUARTER
+}
+
+export function getTotalTicks(meter: RhythmMeter): number {
+  return getTicksPerBar(meter) * BARS_PER_QUESTION
+}
+
+export function getTemplatesForDifficulty(difficulty: RhythmDifficulty, meter: RhythmMeter = '4/4'): RhythmTemplate[] {
+  return Array.from({ length: 8 }, (_, index) => buildRhythmTemplate(difficulty, meter, index))
+}
+
+export function buildRhythmTemplate(difficulty: RhythmDifficulty, meter: RhythmMeter, variant = 0): RhythmTemplate {
+  const cells = buildCellsForDifficulty(difficulty, meter, variant)
+  const label = difficulty === 7 ? '三连音' : RHYTHM_DIFFICULTY_DESCRIPTIONS[difficulty].split('，')[0]
+  return {
+    id: `${meter}-${difficulty}-${variant}-${cells.join('')}`,
+    difficulty,
+    meter,
+    label,
+    description: `${meter} · 四小节 · ${RHYTHM_DIFFICULTY_DESCRIPTIONS[difficulty]}`,
+    cells
+  }
+}
+
+export function cellsFromEvents(events: Array<['note' | 'rest', number]>): RhythmCell[] {
   const cells: RhythmCell[] = []
   for (const [kind, duration] of events) {
     if (kind === 'rest') {
       cells.push(...Array<RhythmCell>(duration).fill('rest'))
-      continue
+    } else {
+      cells.push('attack')
+      cells.push(...Array<RhythmCell>(Math.max(0, duration - 1)).fill('hold'))
     }
-    cells.push('attack')
-    cells.push(...Array<RhythmCell>(duration - 1).fill('hold'))
-  }
-  if (cells.length !== CELLS_PER_BAR) {
-    throw new Error(`Rhythm template must contain ${CELLS_PER_BAR} cells, got ${cells.length}`)
   }
   return cells
 }
 
-export function getTemplatesForDifficulty(difficulty: RhythmDifficulty): RhythmTemplate[] {
-  return RHYTHM_TEMPLATES.filter((template) => template.difficulty === difficulty)
+export function getTickMs(bpm: RhythmBpm): number {
+  return 60000 / bpm / TICKS_PER_QUARTER
 }
 
 export function getSixteenthMs(bpm: RhythmBpm): number {
-  return 60000 / bpm / 4
+  return getTickMs(bpm) * 3
 }
 
-export function getBarDurationMs(bpm: RhythmBpm): number {
-  return getSixteenthMs(bpm) * CELLS_PER_BAR
+export function getBarDurationMs(bpm: RhythmBpm, meter: RhythmMeter = '4/4'): number {
+  return getTickMs(bpm) * getTicksPerBar(meter)
 }
 
-export function getCountInDurationMs(bpm: RhythmBpm): number {
-  return getBarDurationMs(bpm)
+export function getRhythmDurationMs(bpm: RhythmBpm, meter: RhythmMeter = '4/4'): number {
+  return getTickMs(bpm) * getTotalTicks(meter)
+}
+
+export function getCountInDurationMs(bpm: RhythmBpm, meter: RhythmMeter = '4/4'): number {
+  return getBarDurationMs(bpm, meter)
 }
 
 export function getAttackIndexes(cells: RhythmGrid): number[] {
@@ -250,47 +176,50 @@ export function getAttackIndexes(cells: RhythmGrid): number[] {
 }
 
 export function getTargetTimesMs(cells: RhythmGrid, bpm: RhythmBpm): number[] {
-  const sixteenthMs = getSixteenthMs(bpm)
-  return getAttackIndexes(cells).map((index) => index * sixteenthMs)
+  const tickMs = getTickMs(bpm)
+  return getAttackIndexes(cells).map((index) => index * tickMs)
 }
 
 export function buildRhythmDemoEvents(cells: RhythmGrid, bpm: RhythmBpm): RhythmDemoEvent[] {
-  const sixteenthMs = getSixteenthMs(bpm)
+  const tickMs = getTickMs(bpm)
   return cells.map((cell, index) => ({
     index,
-    timeMs: index * sixteenthMs,
+    timeMs: index * tickMs,
     attack: cell === 'attack'
   }))
 }
 
-export function buildUserReplayEvents(hitTimesMs: number[], bpm: RhythmBpm): RhythmReplayEvent[] {
-  const sixteenthMs = getSixteenthMs(bpm)
+export function buildUserReplayEvents(hitTimesMs: number[], bpm: RhythmBpm, totalTicks = Number.POSITIVE_INFINITY): RhythmReplayEvent[] {
+  const tickMs = getTickMs(bpm)
+  const maxIndex = Number.isFinite(totalTicks) ? Math.max(0, totalTicks - 1) : Number.MAX_SAFE_INTEGER
   return hitTimesMs.map((timeMs) => ({
     timeMs,
-    index: Math.max(0, Math.min(15, Math.round(timeMs / sixteenthMs))),
+    index: Math.max(0, Math.min(maxIndex, Math.round(timeMs / tickMs))),
     kind: 'user'
   }))
 }
 
 export function buildComparisonEvents(cells: RhythmGrid, bpm: RhythmBpm, hitTimesMs: number[]): RhythmReplayEvent[] {
+  const tickMs = getTickMs(bpm)
   const standardEvents = getTargetTimesMs(cells, bpm).map<RhythmReplayEvent>((timeMs) => ({
     timeMs,
-    index: Math.max(0, Math.min(15, Math.round(timeMs / getSixteenthMs(bpm)))),
+    index: Math.max(0, Math.min(cells.length - 1, Math.round(timeMs / tickMs))),
     kind: 'standard'
   }))
-  return [...standardEvents, ...buildUserReplayEvents(hitTimesMs, bpm)].sort((left, right) => left.timeMs - right.timeMs)
+  return [...standardEvents, ...buildUserReplayEvents(hitTimesMs, bpm, cells.length)].sort((left, right) => left.timeMs - right.timeMs)
 }
 
 export function getHitToleranceMs(bpm: RhythmBpm): number {
-  return Math.max(70, Math.min(120, getSixteenthMs(bpm) * 0.4))
+  return Math.max(70, Math.min(120, getTickMs(bpm) * 2.4))
 }
 
 function getFeedbackWindowMs(bpm: RhythmBpm): number {
-  return Math.max(getHitToleranceMs(bpm), getSixteenthMs(bpm) * 0.75)
+  return Math.max(getHitToleranceMs(bpm), getTickMs(bpm) * 4.5)
 }
 
 export function evaluateRhythmHits(cells: RhythmGrid, bpm: RhythmBpm, hitTimesMs: number[]): RhythmEvaluation {
   const targetTimes = getTargetTimesMs(cells, bpm)
+  const attackIndexes = getAttackIndexes(cells)
   const toleranceMs = getHitToleranceMs(bpm)
   const feedbackWindowMs = getFeedbackWindowMs(bpm)
   const usedHits = new Set<number>()
@@ -298,7 +227,6 @@ export function evaluateRhythmHits(cells: RhythmGrid, bpm: RhythmBpm, hitTimesMs
   const targets = targetTimes.map<RhythmTargetFeedback>((expectedMs, targetIndex) => {
     let bestHitIndex = -1
     let bestDistance = Number.POSITIVE_INFINITY
-
     hitTimesMs.forEach((actualMs, hitIndex) => {
       if (usedHits.has(hitIndex)) return
       const distance = Math.abs(actualMs - expectedMs)
@@ -308,7 +236,7 @@ export function evaluateRhythmHits(cells: RhythmGrid, bpm: RhythmBpm, hitTimesMs
       }
     })
 
-    const gridIndex = getAttackIndexes(cells)[targetIndex]
+    const gridIndex = attackIndexes[targetIndex]
     if (bestHitIndex === -1) {
       return { index: gridIndex, expectedMs, status: 'missed' }
     }
@@ -320,56 +248,92 @@ export function evaluateRhythmHits(cells: RhythmGrid, bpm: RhythmBpm, hitTimesMs
     return { index: gridIndex, expectedMs, actualMs, offsetMs, status }
   })
 
-  const sixteenthMs = getSixteenthMs(bpm)
+  const tickMs = getTickMs(bpm)
   const extras = hitTimesMs.flatMap<RhythmExtraHit>((actualMs, hitIndex) => {
     if (usedHits.has(hitIndex)) return []
-    return [{ actualMs, index: Math.max(0, Math.min(15, Math.round(actualMs / sixteenthMs))) }]
+    return [{ actualMs, index: Math.max(0, Math.min(cells.length - 1, Math.round(actualMs / tickMs))) }]
   })
 
-  const offsets = targets
-    .map((target) => target.offsetMs)
-    .filter((offset): offset is number => typeof offset === 'number')
-  const averageOffsetMs = offsets.length
-    ? Math.round(offsets.reduce((sum, offset) => sum + offset, 0) / offsets.length)
-    : null
+  const offsets = targets.map((target) => target.offsetMs).filter((offset): offset is number => typeof offset === 'number')
+  const averageOffsetMs = offsets.length ? Math.round(offsets.reduce((sum, offset) => sum + offset, 0) / offsets.length) : null
   const correct = targets.every((target) => target.status === 'hit') && extras.length === 0
-
   return { correct, toleranceMs, averageOffsetMs, targets, extras }
 }
 
 export function rhythmToNotationEvents(cells: RhythmGrid): RhythmNotationEvent[] {
   const events: RhythmNotationEvent[] = []
-  for (let index = 0; index < cells.length; ) {
+  for (let index = 0; index < cells.length;) {
     const cell = cells[index]
-    let durationCells = 1
-    while (index + durationCells < cells.length && cells[index + durationCells] === (cell === 'rest' ? 'rest' : 'hold')) {
-      durationCells += 1
+    let durationTicks = 1
+    while (index + durationTicks < cells.length && cells[index + durationTicks] === (cell === 'rest' ? 'rest' : 'hold')) {
+      durationTicks += 1
     }
-
-    if (cell === 'rest' && ![1, 2, 3, 4].includes(durationCells)) {
-      let remaining = durationCells
-      let start = index
-      for (const chunk of [4, 2, 1] as const) {
-        while (remaining >= chunk) {
-          events.push({ kind: 'rest', start, durationCells: chunk })
-          start += chunk
-          remaining -= chunk
-        }
-      }
-      index += durationCells
-      continue
-    }
-
-    if (![1, 2, 3, 4].includes(durationCells)) {
-      throw new Error(`Unsupported rhythm duration: ${durationCells}`)
-    }
-
     events.push({
       kind: cell === 'rest' ? 'rest' : 'note',
       start: index,
-      durationCells: durationCells as 1 | 2 | 3 | 4
+      durationTicks,
+      tuplet: durationTicks === 4 ? 3 : undefined
     })
-    index += durationCells
+    index += durationTicks
   }
   return events
+}
+
+function unit(label: string): RhythmUnit {
+  const found = UNITS.find((candidate) => candidate.label === label)
+  if (!found) throw new Error(`Unknown rhythm unit: ${label}`)
+  return found
+}
+
+function buildCellsForDifficulty(difficulty: RhythmDifficulty, meter: RhythmMeter, variant: number): RhythmCell[] {
+  const ticksPerBar = getTicksPerBar(meter)
+  const totalTicks = getTotalTicks(meter)
+  const cells: RhythmCell[] = []
+  const allowedPatterns = PATTERN_LIBRARY.filter((pattern) => pattern.difficulty <= difficulty)
+  let cursor = 0
+  let restInserted = false
+
+  while (cursor < totalTicks) {
+    const barRemaining = ticksPerBar - (cursor % ticksPerBar)
+    const candidates = allowedPatterns.filter((pattern) => patternDuration(pattern.units) <= barRemaining)
+    if (candidates.length === 0) {
+      appendUnit(cells, { kind: 'rest', durationTicks: barRemaining, label: '补齐休止', difficulty: 1 })
+      restInserted = true
+      cursor += barRemaining
+      continue
+    }
+    const needRest: boolean = !restInserted && totalTicks - cursor <= ticksPerBar
+    const restPattern = candidates.find((pattern) => pattern.units.every((rhythmUnit) => rhythmUnit.kind === 'rest'))
+    const pattern: { id: string; difficulty: RhythmDifficulty; label: string; units: RhythmUnit[] } = needRest && restPattern
+      ? restPattern
+      : candidates[Math.floor(variant + cursor / 3 + difficulty) % candidates.length]
+    const units: RhythmUnit[] = pattern.units
+    for (const rhythmUnit of units) {
+      appendUnit(cells, rhythmUnit)
+      restInserted ||= rhythmUnit.kind === 'rest'
+      cursor += rhythmUnit.durationTicks
+    }
+  }
+
+  const trimmed = cells.slice(0, totalTicks)
+  if (!trimmed.includes('attack')) {
+    trimmed[0] = 'attack'
+    for (let index = 1; index < Math.min(TICKS_PER_QUARTER, trimmed.length); index += 1) {
+      trimmed[index] = 'hold'
+    }
+  }
+  return trimmed
+}
+
+function appendUnit(cells: RhythmCell[], rhythmUnit: RhythmUnit): void {
+  if (rhythmUnit.kind === 'rest') {
+    cells.push(...Array<RhythmCell>(rhythmUnit.durationTicks).fill('rest'))
+    return
+  }
+  cells.push('attack')
+  cells.push(...Array<RhythmCell>(rhythmUnit.durationTicks - 1).fill('hold'))
+}
+
+function patternDuration(units: RhythmUnit[]): number {
+  return units.reduce((sum, rhythmUnit) => sum + rhythmUnit.durationTicks, 0)
 }

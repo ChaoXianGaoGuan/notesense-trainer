@@ -1,5 +1,5 @@
-import type { RhythmBpm, RhythmGrid } from '../core/rhythm'
-import { getSixteenthMs } from '../core/rhythm'
+import type { RhythmBpm, RhythmGrid, RhythmMeter } from '../core/rhythm'
+import { getBeatsPerBar, getTickMs } from '../core/rhythm'
 
 let context: AudioContext | null = null
 
@@ -35,67 +35,67 @@ function scheduleTap(audioContext: AudioContext, startTime: number, variant: 'st
 }
 
 export const metronome = {
-  async playCountInAndBar(bpm: RhythmBpm): Promise<void> {
+  async playCountInAndBar(bpm: RhythmBpm, meter: RhythmMeter): Promise<void> {
     const audioContext = getAudioContext()
     await audioContext.resume()
-    const beatSeconds = getSixteenthMs(bpm) * 4 / 1000
+    const beatSeconds = getTickMs(bpm) * 12 / 1000
     const startTime = audioContext.currentTime + 0.06
-    for (let beat = 0; beat < 8; beat += 1) {
-      scheduleClick(audioContext, startTime + beat * beatSeconds, beat % 4 === 0)
+    for (let beat = 0; beat < getBeatsPerBar(meter); beat += 1) {
+      scheduleClick(audioContext, startTime + beat * beatSeconds, beat === 0)
     }
   },
 
-  async playCountInAndRhythm(cells: RhythmGrid, bpm: RhythmBpm): Promise<void> {
+  async playCountInAndRhythm(cells: RhythmGrid, bpm: RhythmBpm, meter: RhythmMeter): Promise<void> {
     const audioContext = getAudioContext()
     await audioContext.resume()
-    const sixteenthSeconds = getSixteenthMs(bpm) / 1000
-    const beatSeconds = sixteenthSeconds * 4
+    const tickSeconds = getTickMs(bpm) / 1000
+    const beatSeconds = tickSeconds * 12
     const startTime = audioContext.currentTime + 0.06
 
-    for (let beat = 0; beat < 8; beat += 1) {
-      scheduleClick(audioContext, startTime + beat * beatSeconds, beat % 4 === 0)
+    for (let beat = 0; beat < getBeatsPerBar(meter); beat += 1) {
+      scheduleClick(audioContext, startTime + beat * beatSeconds, beat === 0)
     }
 
-    const rhythmStart = startTime + beatSeconds * 4
+    const rhythmStart = startTime + beatSeconds * getBeatsPerBar(meter)
     cells.forEach((cell, index) => {
       if (cell === 'attack') {
-        scheduleTap(audioContext, rhythmStart + index * sixteenthSeconds, 'standard')
+        scheduleTap(audioContext, rhythmStart + index * tickSeconds, 'standard')
       }
     })
   },
 
-  async playCountInAndUserHits(hitTimesMs: number[], bpm: RhythmBpm): Promise<void> {
+  async playCountInAndUserHits(hitTimesMs: number[], bpm: RhythmBpm, meter: RhythmMeter): Promise<void> {
     const audioContext = getAudioContext()
     await audioContext.resume()
-    const sixteenthSeconds = getSixteenthMs(bpm) / 1000
-    const beatSeconds = sixteenthSeconds * 4
+    const tickSeconds = getTickMs(bpm) / 1000
+    const beatSeconds = tickSeconds * 12
     const startTime = audioContext.currentTime + 0.06
 
-    for (let beat = 0; beat < 8; beat += 1) {
-      scheduleClick(audioContext, startTime + beat * beatSeconds, beat % 4 === 0)
+    for (let beat = 0; beat < getBeatsPerBar(meter); beat += 1) {
+      scheduleClick(audioContext, startTime + beat * beatSeconds, beat === 0)
     }
 
-    const rhythmStart = startTime + beatSeconds * 4
+    const rhythmStart = startTime + beatSeconds * getBeatsPerBar(meter)
     hitTimesMs.forEach((timeMs) => {
       scheduleTap(audioContext, rhythmStart + timeMs / 1000, 'user')
     })
   },
 
-  async playCountInAndComparison(cells: RhythmGrid, hitTimesMs: number[], bpm: RhythmBpm): Promise<void> {
+  async playCountInAndComparison(cells: RhythmGrid, hitTimesMs: number[], bpm: RhythmBpm, meter: RhythmMeter): Promise<void> {
     const audioContext = getAudioContext()
     await audioContext.resume()
-    const sixteenthSeconds = getSixteenthMs(bpm) / 1000
-    const beatSeconds = sixteenthSeconds * 4
+    const tickSeconds = getTickMs(bpm) / 1000
+    const beatSeconds = tickSeconds * 12
     const startTime = audioContext.currentTime + 0.06
 
-    for (let beat = 0; beat < 8; beat += 1) {
-      scheduleClick(audioContext, startTime + beat * beatSeconds, beat % 4 === 0)
+    for (let beat = 0; beat < getBeatsPerBar(meter); beat += 1) {
+      scheduleClick(audioContext, startTime + beat * beatSeconds, beat === 0)
     }
 
-    const rhythmStart = startTime + beatSeconds * 4
+    const rhythmStart = startTime + beatSeconds * getBeatsPerBar(meter)
     cells.forEach((cell, index) => {
       if (cell === 'attack') {
-        scheduleTap(audioContext, rhythmStart + index * sixteenthSeconds, 'standard')
+        scheduleTap(audioContext, rhythmStart + index * tickSeconds, 'standard')
       }
     })
     hitTimesMs.forEach((timeMs) => {
