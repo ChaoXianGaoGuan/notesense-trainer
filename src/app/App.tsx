@@ -1374,13 +1374,13 @@ function JianpuRhythm({
 }) {
   const ticksPerBar = getTicksPerBar(meter)
   const bars = splitRhythmIntoBars(cells, ticksPerBar)
-  const width = 1100
-  const height = 190
+  const width = 1180
+  const height = 170
   const left = 28
   const right = 28
-  const top = 30
-  const bottom = 150
-  const noteY = 92
+  const top = 24
+  const bottom = 132
+  const noteY = 82
   const barWidth = (width - left - right) / bars.length
   return (
     <div className="jianpu-rhythm" aria-label="简谱节奏型">
@@ -1396,13 +1396,16 @@ function JianpuRhythm({
                 const beatX = barX + (beatIndex + 1) * getTicksPerBeat() / ticksPerBar * barWidth
                 return <line key={beatIndex} x1={beatX} y1={top + 12} x2={beatX} y2={bottom - 12} className="jianpu-beatline" />
               })}
-              {bar.events.map((event) => {
+              {bar.events.map((event, eventIndex) => {
                 const absoluteStart = bar.startTick + event.start
                 const eventState = getJianpuEventState(event, absoluteStart, evaluation, activeCells)
-                const eventX = barX + event.start / ticksPerBar * barWidth
-                const eventWidth = event.durationTicks / ticksPerBar * barWidth
-                const centerX = eventX + eventWidth / 2
-                const underlineWidth = Math.max(14, Math.min(42, eventWidth * 0.72))
+                const symbolPadding = 18
+                const usableWidth = barWidth - symbolPadding * 2
+                const centerX = bar.events.length === 1
+                  ? barX + barWidth / 2
+                  : barX + symbolPadding + eventIndex * usableWidth / (bar.events.length - 1)
+                const visualWidth = Math.max(18, Math.min(30, usableWidth / Math.max(1, bar.events.length)))
+                const underlineWidth = event.durationTicks === 3 ? 14 : Math.max(16, Math.min(24, visualWidth))
                 const textClass = [
                   'jianpu-symbol',
                   event.kind === 'rest' ? 'rest' : 'note',
@@ -1416,11 +1419,11 @@ function JianpuRhythm({
                   <g key={`${bar.barIndex}-${event.start}-${event.kind}`}>
                     {eventState && (
                       <rect
-                        x={Math.max(barX + 2, eventX + 2)}
-                        y={noteY - 36}
-                        width={Math.max(20, eventWidth - 4)}
-                        height="76"
-                        rx="8"
+                        x={centerX - visualWidth / 2}
+                        y={noteY - 26}
+                        width={Math.max(18, visualWidth)}
+                        height="56"
+                        rx="7"
                         className={markClass}
                       />
                     )}

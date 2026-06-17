@@ -494,13 +494,13 @@ button.primary {
 .jianpu-measure-label,
 .jianpu-triplet {
   fill: #64748b;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
   text-anchor: middle;
 }
 
 .jianpu-symbol {
-  font-size: 34px;
+  font-size: 22px;
   font-weight: 800;
   text-anchor: middle;
   dominant-baseline: middle;
@@ -516,14 +516,14 @@ button.primary {
 
 .jianpu-dot {
   fill: #111827;
-  font-size: 24px;
+  font-size: 16px;
   font-weight: 800;
   dominant-baseline: middle;
 }
 
 .jianpu-underline {
   stroke: #111827;
-  stroke-width: 4;
+  stroke-width: 3;
   stroke-linecap: round;
 }
 
