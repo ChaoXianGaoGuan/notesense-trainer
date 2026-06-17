@@ -464,120 +464,100 @@ button.primary {
 }
 
 .jianpu-rhythm {
-  min-width: min(100%, 960px);
+  overflow-x: hidden;
 }
 
-.jianpu-bars {
+.jianpu-score-svg {
   grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(240px, 1fr));
-  gap: 10px;
-  min-width: 1040px;
-}
-
-.jianpu-bar {
-  position: relative;
-  display: grid;
-  gap: 0;
-  min-height: 104px;
-  padding: 22px 8px 10px;
-  border: 1px solid #dbe3ef;
+  width: 100%;
+  height: auto;
+  display: block;
   border-radius: 6px;
   background: #fff;
 }
 
-.jianpu-bar-label {
-  position: absolute;
-  top: 4px;
-  left: 8px;
-  z-index: 2;
-  color: #64748b;
-  font-size: 12px;
+.jianpu-score-bg {
+  fill: #fff;
+  stroke: #dbe3ef;
+}
+
+.jianpu-barline {
+  stroke: #334155;
+  stroke-width: 2;
+}
+
+.jianpu-beatline {
+  stroke: #e2e8f0;
+  stroke-width: 1;
+}
+
+.jianpu-measure-label,
+.jianpu-triplet {
+  fill: #64748b;
+  font-size: 14px;
   font-weight: 700;
+  text-anchor: middle;
 }
 
-.jianpu-beat-line {
-  grid-row: 1;
-  align-self: stretch;
-  width: 1px;
-  min-height: 76px;
-  background: #e2e8f0;
-  z-index: 1;
-}
-
-.jianpu-event {
-  position: relative;
-  grid-row: 1;
-  display: grid;
-  min-height: 76px;
-  justify-items: center;
-  align-content: center;
-  gap: 4px;
-  border-radius: 6px;
-  background: #f8fafc;
-  color: #111827;
-  z-index: 2;
-}
-
-.jianpu-event.tuplet {
-  border-color: #bfdbfe;
-  background: #eff6ff;
-}
-
-.jianpu-event span {
-  font-size: 28px;
+.jianpu-symbol {
+  font-size: 34px;
   font-weight: 800;
-  line-height: 1;
+  text-anchor: middle;
+  dominant-baseline: middle;
 }
 
-.jianpu-event span em {
-  margin-left: 2px;
-  font-size: 18px;
-  font-style: normal;
+.jianpu-symbol.note {
+  fill: #111827;
 }
 
-.jianpu-event b {
-  font-size: 12px;
-  color: #2563eb;
+.jianpu-symbol.rest {
+  fill: #64748b;
 }
 
-.jianpu-event i {
-  display: block;
-  width: min(48px, 78%);
-  height: 3px;
-  border-radius: 999px;
-  background: #111827;
+.jianpu-dot {
+  fill: #111827;
+  font-size: 24px;
+  font-weight: 800;
+  dominant-baseline: middle;
 }
 
-.jianpu-event.duration-12 i,
-.jianpu-event.duration-24 i {
-  display: none;
+.jianpu-underline {
+  stroke: #111827;
+  stroke-width: 4;
+  stroke-linecap: round;
 }
 
-.jianpu-event.rest {
-  color: #64748b;
+.jianpu-event-highlight {
+  fill: #dbeafe;
 }
 
-.jianpu-event.active {
-  outline: 2px solid #60a5fa;
-  outline-offset: 1px;
+.jianpu-event-highlight.hit {
+  fill: #d1fae5;
 }
 
-.jianpu-event.hit {
-  background: #ecfdf5;
-  color: #047857;
+.jianpu-event-highlight.early,
+.jianpu-event-highlight.late {
+  fill: #ffedd5;
 }
 
-.jianpu-event.early,
-.jianpu-event.late {
-  background: #fff7ed;
-  color: #c2410c;
+.jianpu-event-highlight.missed,
+.jianpu-event-highlight.extra {
+  fill: #fee2e2;
 }
 
-.jianpu-event.missed,
-.jianpu-event.extra {
-  background: #fef2f2;
-  color: #b91c1c;
+.jianpu-symbol.active,
+.jianpu-symbol.hit {
+  fill: #047857;
+}
+
+.jianpu-symbol.early,
+.jianpu-symbol.late {
+  fill: #c2410c;
+}
+
+.jianpu-symbol.missed,
+.jianpu-symbol.extra {
+  fill: #b91c1c;
 }
 
 .staff-canvas {
@@ -590,9 +570,9 @@ button.primary {
 .rhythm-feedback-grid {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(42px, max-content));
+  grid-template-columns: repeat(auto-fit, minmax(42px, 1fr));
   gap: 4px;
-  min-width: 640px;
+  min-width: 0;
 }
 
 .rhythm-cell {
