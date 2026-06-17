@@ -5,6 +5,7 @@ import { inputAnalyzer } from '../audio/input-analyzer'
 import { metronome } from '../audio/metronome'
 import { CHORD_LABELS } from '../core/chords'
 import { INTERVAL_LABELS } from '../core/intervals'
+import { layoutJianpuRhythm } from '../core/jianpu-rhythm'
 import { DEGREE_ROMANS, getMajorKeyGroups, type MajorKey } from '../core/major-keys'
 import { SOLFEGE_OPTIONS, solfegeToOctavePitch } from '../core/notes'
 import {
@@ -12,10 +13,7 @@ import {
   buildRhythmDemoEvents,
   buildUserReplayEvents,
   getCountInDurationMs,
-  getBeatsPerBar,
-  getTicksPerBeat,
   getTicksPerBar,
-  getTargetTimesMs,
   rhythmToNotationEvents,
   type RhythmEvaluation,
   type RhythmMeter,
@@ -1372,124 +1370,76 @@ function JianpuRhythm({
   evaluation: RhythmEvaluation | null
   activeCells: RhythmActiveCells
 }) {
-  const ticksPerBar = getTicksPerBar(meter)
-  const bars = splitRhythmIntoBars(cells, ticksPerBar)
-  const width = 1180
-  const height = 170
-  const left = 28
-  const right = 28
-  const top = 24
-  const bottom = 132
-  const noteY = 82
-  const barWidth = (width - left - right) / bars.length
+  const measuresPerRow = useNarrowViewport() ? 2 : 4
+  const layout = layoutJianpuRhythm(cells, meter, evaluation, activeCells, { measuresPerRow })
   return (
     <div className="jianpu-rhythm" aria-label="简谱节奏型">
-      <svg className="jianpu-score-svg" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${meter} 四小节简谱节奏`}>
-        <rect x={left} y={top} width={width - left - right} height={bottom - top} rx="8" className="jianpu-score-bg" />
-        {bars.map((bar) => {
-          const barX = left + bar.barIndex * barWidth
+      <svg className="jianpu-score-svg" viewBox={`0 0 ${layout.width} ${layout.height}`} role="img" aria-label={`${meter} 四小节简谱节奏`}>
+        <rect x="1" y="1" width={layout.width - 2} height={layout.height - 2} rx="8" className="jianpu-score-bg" />
+        {layout.guideLines.map((line) => (
+          <line
+            key={line.id}
+            x1={line.x}
+            y1={line.y1}
+            x2={line.x}
+            y2={line.y2}
+            className={line.kind === 'bar' ? 'jianpu-barline' : 'jianpu-beatline'}
+          />
+        ))}
+        {layout.measureLabels.map((label) => (
+          <text key={label.id} x={label.x} y={label.y} className="jianpu-measure-label">{label.text}</text>
+        ))}
+        {layout.glyphs.map((glyph) => {
+          const textClass = ['jianpu-symbol', glyph.kind === 'rest' ? 'rest' : 'note', glyph.state].filter(Boolean).join(' ')
+          const markClass = ['jianpu-event-highlight', glyph.state].filter(Boolean).join(' ')
           return (
-            <g key={bar.barIndex}>
-              <line x1={barX} y1={top} x2={barX} y2={bottom} className="jianpu-barline" />
-              <text x={barX + 10} y={top + 18} className="jianpu-measure-label">{bar.barIndex + 1}</text>
-              {Array.from({ length: getBeatsPerBar(meter) - 1 }, (_, beatIndex) => {
-                const beatX = barX + (beatIndex + 1) * getTicksPerBeat() / ticksPerBar * barWidth
-                return <line key={beatIndex} x1={beatX} y1={top + 12} x2={beatX} y2={bottom - 12} className="jianpu-beatline" />
-              })}
-              {bar.events.map((event, eventIndex) => {
-                const absoluteStart = bar.startTick + event.start
-                const eventState = getJianpuEventState(event, absoluteStart, evaluation, activeCells)
-                const symbolPadding = 18
-                const usableWidth = barWidth - symbolPadding * 2
-                const centerX = bar.events.length === 1
-                  ? barX + barWidth / 2
-                  : barX + symbolPadding + eventIndex * usableWidth / (bar.events.length - 1)
-                const visualWidth = Math.max(18, Math.min(30, usableWidth / Math.max(1, bar.events.length)))
-                const underlineWidth = event.durationTicks === 3 ? 14 : Math.max(16, Math.min(24, visualWidth))
-                const textClass = [
-                  'jianpu-symbol',
-                  event.kind === 'rest' ? 'rest' : 'note',
-                  eventState
-                ].filter(Boolean).join(' ')
-                const markClass = [
-                  'jianpu-event-highlight',
-                  eventState
-                ].filter(Boolean).join(' ')
-                return (
-                  <g key={`${bar.barIndex}-${event.start}-${event.kind}`}>
-                    {eventState && (
-                      <rect
-                        x={centerX - visualWidth / 2}
-                        y={noteY - 26}
-                        width={Math.max(18, visualWidth)}
-                        height="56"
-                        rx="7"
-                        className={markClass}
-                      />
-                    )}
-                    {event.tuplet && (
-                      <text x={centerX} y={noteY - 34} className="jianpu-triplet">3</text>
-                    )}
-                    <text x={centerX} y={noteY} className={textClass}>
-                      {event.kind === 'note' ? 'X' : '0'}
-                    </text>
-                    {event.durationTicks === 9 && <text x={centerX + 18} y={noteY - 4} className="jianpu-dot">.</text>}
-                    {event.durationTicks <= 6 && (
-                      <line
-                        x1={centerX - underlineWidth / 2}
-                        y1={noteY + 20}
-                        x2={centerX + underlineWidth / 2}
-                        y2={noteY + 20}
-                        className="jianpu-underline"
-                      />
-                    )}
-                    {event.durationTicks === 3 && (
-                      <line
-                        x1={centerX - underlineWidth / 2}
-                        y1={noteY + 27}
-                        x2={centerX + underlineWidth / 2}
-                        y2={noteY + 27}
-                        className="jianpu-underline"
-                      />
-                    )}
-                  </g>
-                )
-              })}
+            <g key={glyph.id} data-rhythm-tick={glyph.startTick}>
+              {glyph.state && (
+                <rect
+                  x={glyph.x - glyph.width / 2}
+                  y={glyph.y - 25}
+                  width={glyph.width}
+                  height="56"
+                  rx="7"
+                  className={markClass}
+                />
+              )}
+              {glyph.tuplet && <text x={glyph.x} y={glyph.y - 36} className="jianpu-triplet">3</text>}
+              <text x={glyph.x} y={glyph.y} className={textClass} style={{ fontSize: layout.noteFontSize }}>
+                {glyph.kind === 'note' ? 'X' : '0'}
+              </text>
+              {glyph.dotted && <text x={glyph.x + 17} y={glyph.y - 4} className="jianpu-dot">.</text>}
             </g>
           )
         })}
-        <line x1={width - right} y1={top} x2={width - right} y2={bottom} className="jianpu-barline" />
+        {layout.underlines.map((segment) => (
+          <line
+            key={segment.id}
+            x1={segment.x1}
+            y1={segment.y}
+            x2={segment.x2}
+            y2={segment.y}
+            className="jianpu-underline"
+          />
+        ))}
       </svg>
       <RhythmFeedbackGrid cells={cells} meter={meter} evaluation={evaluation} activeCells={activeCells} />
     </div>
   )
 }
 
-function splitRhythmIntoBars(cells: SyncopationQuestion['cells'], ticksPerBar: number) {
-  const barCount = Math.ceil(cells.length / ticksPerBar)
-  return Array.from({ length: barCount }, (_, barIndex) => {
-    const startTick = barIndex * ticksPerBar
-    const barCells = cells.slice(startTick, startTick + ticksPerBar)
-    return {
-      barIndex,
-      startTick,
-      events: rhythmToNotationEvents(barCells)
-    }
-  })
-}
+function useNarrowViewport() {
+  const [isNarrow, setIsNarrow] = useState(() => typeof window !== 'undefined' ? window.matchMedia('(max-width: 700px)').matches : false)
 
-function getJianpuEventState(
-  event: ReturnType<typeof rhythmToNotationEvents>[number],
-  absoluteStart: number,
-  evaluation: RhythmEvaluation | null,
-  activeCells: RhythmActiveCells
-) {
-  const indexes = Array.from({ length: event.durationTicks }, (_, offset) => absoluteStart + offset)
-  if (indexes.some((index) => activeCells.standard === index || activeCells.user === index)) return 'active'
-  const target = event.kind === 'note' ? evaluation?.targets.find((candidate) => candidate.index === absoluteStart) : null
-  if (target) return target.status
-  if (evaluation?.extras.some((candidate) => indexes.includes(candidate.index))) return 'extra'
-  return ''
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 700px)')
+    const update = () => setIsNarrow(query.matches)
+    update()
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
+
+  return isNarrow
 }
 
 function StaffRhythm({

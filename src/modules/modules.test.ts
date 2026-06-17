@@ -1,4 +1,5 @@
 import { buildDegreeChord, buildMajorScale, findMajorKeysForTriad } from '../core/major-keys'
+import { layoutJianpuRhythm } from '../core/jianpu-rhythm'
 import { getNaturalNoteFromPitch } from '../core/notes'
 import {
   buildRelativePitchPatterns,
@@ -11,6 +12,7 @@ import {
   buildComparisonEvents,
   buildRhythmDemoEvents,
   buildUserReplayEvents,
+  cellsFromEvents,
   evaluateRhythmHits,
   getTicksPerBar,
   getTargetTimesMs,
@@ -289,6 +291,49 @@ describe('syncopation trainer', () => {
     expect(checkSyncopationAnswer(question, 60, [140]).correct).toBe(false)
     expect(checkSyncopationAnswer(question, 60, [140], -140).correct).toBe(true)
     expect(buildUserReplayEvents([140 + -140], 60)).toEqual([{ index: 0, timeMs: 0, kind: 'user' }])
+  })
+
+  it('lays out jianpu rhythm as readable teaching score', () => {
+    const cells = [
+      ...Array(12).fill('rest'),
+      ...Array(4).fill('attack').flatMap(() => ['attack', 'hold', 'hold']),
+      ...Array(8).fill('rest')
+    ]
+    const layout = layoutJianpuRhythm(cells, '4/4', null, { standard: null, user: null }, { measuresPerRow: 2 })
+    expect(layout.height).toBeGreaterThan(250)
+    expect(layout.glyphs.filter((glyph) => glyph.kind === 'rest' && glyph.underlineLevel === 0)).not.toHaveLength(0)
+    expect(layout.glyphs.filter((glyph) => glyph.kind === 'note' && glyph.underlineLevel === 2)).toHaveLength(4)
+    expect(layout.underlines.filter((line) => line.level === 2).length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('marks dotted and tuplet jianpu glyphs without connecting across beats', () => {
+    const cells = cellsFromEvents([
+      ['note', 9],
+      ['note', 3],
+      ['note', 4],
+      ['note', 4],
+      ['note', 4],
+      ['rest', 12]
+    ])
+    const layout = layoutJianpuRhythm(cells, '2/4', null, { standard: null, user: null }, { measuresPerRow: 4 })
+    expect(layout.glyphs.some((glyph) => glyph.dotted)).toBe(true)
+    expect(layout.glyphs.filter((glyph) => glyph.tuplet === 3)).toHaveLength(3)
+    const firstBeatUnderlines = layout.underlines.filter((line) => line.id.includes('-0-0-'))
+    const secondBeatUnderlines = layout.underlines.filter((line) => line.id.includes('-0-1-'))
+    expect(firstBeatUnderlines.length).toBeGreaterThan(0)
+    expect(secondBeatUnderlines.length).toBeGreaterThan(0)
+  })
+
+  it('draws short rest underlines as separate jianpu marks', () => {
+    const layout = layoutJianpuRhythm(cellsFromEvents([
+      ['rest', 6],
+      ['rest', 3],
+      ['note', 3]
+    ]), '2/4', null, { standard: null, user: null }, { measuresPerRow: 2 })
+    const restGlyphs = layout.glyphs.filter((glyph) => glyph.kind === 'rest')
+    expect(restGlyphs.map((glyph) => glyph.underlineLevel)).toEqual([1, 2])
+    expect(layout.underlines.filter((line) => line.id.includes('-0-0-1-'))).toHaveLength(3)
+    expect(layout.underlines.filter((line) => line.id.includes('-0-0-2-')).length).toBeGreaterThanOrEqual(1)
   })
 })
 
