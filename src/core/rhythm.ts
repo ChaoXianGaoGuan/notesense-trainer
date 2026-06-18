@@ -484,16 +484,60 @@ function buildTieTrainingCells(
     throw new Error('Unable to generate required tie boundaries')
   }
 
-  for (const tie of ties) {
-    cells[tie.startTick] = 'attack'
-    for (let tick = tie.startTick + 1; tick < tie.endTick; tick += 1) cells[tick] = 'hold'
-  }
+  rewriteTieBeats(cells, ties)
   ensureRestOutsideTies(cells, ties)
 
   return {
     cells,
     patternIds: [...base.patternIds, ...ties.map((tie) => `tie-across-${tie.boundaryKind}`)],
     ties
+  }
+}
+
+function rewriteTieBeats(cells: RhythmCell[], ties: RhythmTie[]): void {
+  const affectedBeatStarts = new Set<number>()
+  for (const tie of ties) {
+    const firstBeat = Math.floor(tie.startTick / TICKS_PER_QUARTER) * TICKS_PER_QUARTER
+    const lastBeat = Math.floor((tie.endTick - 1) / TICKS_PER_QUARTER) * TICKS_PER_QUARTER
+    for (let beatStart = firstBeat; beatStart <= lastBeat; beatStart += TICKS_PER_QUARTER) {
+      affectedBeatStarts.add(beatStart)
+    }
+  }
+
+  for (const beatStart of affectedBeatStarts) {
+    const beatEnd = beatStart + TICKS_PER_QUARTER
+    const rewritten: Array<RhythmCell | null> = Array.from({ length: TICKS_PER_QUARTER }, () => null)
+    for (const tie of ties) {
+      const start = Math.max(beatStart, tie.startTick)
+      const end = Math.min(beatEnd, tie.endTick)
+      if (start >= end) continue
+      for (let tick = start; tick < end; tick += 1) rewritten[tick - beatStart] = 'hold'
+      if (tie.startTick >= beatStart && tie.startTick < beatEnd) rewritten[tie.startTick - beatStart] = 'attack'
+    }
+
+    for (let index = 0; index < rewritten.length;) {
+      if (rewritten[index] !== null) {
+        index += 1
+        continue
+      }
+      let gapEnd = index
+      while (gapEnd < rewritten.length && rewritten[gapEnd] === null) gapEnd += 1
+      let cursor = index
+      let remaining = gapEnd - index
+      for (const duration of [9, 6, 3]) {
+        while (remaining >= duration) {
+          rewritten[cursor] = 'attack'
+          for (let offset = 1; offset < duration; offset += 1) rewritten[cursor + offset] = 'hold'
+          cursor += duration
+          remaining -= duration
+        }
+      }
+      if (remaining !== 0) throw new Error('Unable to fill rewritten tie beat')
+      index = gapEnd
+    }
+    cells.splice(beatStart, TICKS_PER_QUARTER, ...(rewritten as RhythmCell[]))
+    const tieCrossesBeatEnd = ties.some((tie) => tie.startTick < beatEnd && tie.endTick > beatEnd)
+    if (!tieCrossesBeatEnd && beatEnd < cells.length && cells[beatEnd] === 'hold') cells[beatEnd] = 'attack'
   }
 }
 

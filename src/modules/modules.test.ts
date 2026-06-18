@@ -324,6 +324,32 @@ describe('syncopation trainer', () => {
     expect(wrapped.ties.map((tie) => tie.kind)).toEqual(['outgoing', 'incoming'])
   })
 
+  it('keeps every rendered beat at exactly one quarter note in tie training', () => {
+    for (const meter of ['2/4', '3/4', '4/4'] as const) {
+      const ticksPerBar = getTicksPerBar(meter)
+      const beatsPerBar = Number(meter[0])
+      for (const template of getTemplatesForDifficulty(9, meter)) {
+        expect(rhythmToNotationEvents(template.cells).every((event) => [3, 4, 6, 9, 12].includes(event.durationTicks))).toBe(true)
+        const layout = layoutJianpuRhythm(
+          template.cells,
+          meter,
+          null,
+          { standard: null, user: null },
+          { measuresPerRow: 4 }
+        )
+        for (let measureIndex = 0; measureIndex < 4; measureIndex += 1) {
+          for (let beatIndex = 0; beatIndex < beatsPerBar; beatIndex += 1) {
+            const beatStart = measureIndex * ticksPerBar + beatIndex * 12
+            const renderedTicks = layout.glyphs
+              .filter((glyph) => glyph.startTick >= beatStart && glyph.startTick < beatStart + 12)
+              .reduce((sum, glyph) => sum + glyph.durationTicks, 0)
+            expect(renderedTicks, `${template.id}, measure ${measureIndex + 1}, beat ${beatIndex + 1}`).toBe(12)
+          }
+        }
+      }
+    }
+  })
+
   it('converts bpm to target times on the tick timeline', () => {
     const question = generateSyncopationQuestion({ difficulty: 1, bpm: 60, meter: '4/4', notation: 'jianpu', metronomeMode: 'full', inputCalibrationMs: -140 })
     const targets = getTargetTimesMs(question.cells, 60)

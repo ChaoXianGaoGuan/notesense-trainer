@@ -1516,7 +1516,8 @@ function StaffRhythm({
 
         const measureEvents = renderEvents.filter((event) => event.start >= measureStart && event.start < measureEnd)
         const notes = measureEvents.map((event) => {
-          const duration = event.durationTicks === 3 ? '16' : event.durationTicks === 4 ? '8' : event.durationTicks === 6 ? '8' : event.durationTicks === 9 ? '8d' : event.durationTicks === 12 ? 'q' : 'q'
+          const duration = event.durationTicks === 3 ? '16' : event.durationTicks === 4 ? '8' : event.durationTicks === 6 ? '8' : event.durationTicks === 9 ? '8d' : event.durationTicks === 12 ? 'q' : null
+          if (!duration) throw new Error(`Unsupported staff rhythm duration: ${event.durationTicks} ticks`)
           return new StaveNote({
             keys: ['b/4'],
             duration: event.kind === 'rest' ? `${duration}r` : duration,

@@ -4,7 +4,9 @@ All notable changes to NoteSense are recorded here.
 
 ## Unreleased
 
-- Future changes will be added here before release.
+- Fixed tie-training generation so rewritten beats cannot leave unsupported one- or two-tick fragments.
+- Kept jianpu and staff notation aligned to the same 12-tick beat totals and attack positions.
+- Made staff rendering reject unsupported durations instead of displaying them as quarter notes.
 
 ## 0.2.0 - 2026-06-11
 

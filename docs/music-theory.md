@@ -105,3 +105,5 @@ The middle quarter note of large syncopation begins off the beat and crosses the
 An eighth-note triplet is displayed as one group: an arc spans the first through third notes and a single `3` appears at the center of the arc. It is not labeled with a separate `3` over every note.
 
 Tie-training questions contain two to four non-overlapping ties and guarantee both a beat-boundary tie and a measure-boundary tie. A tied continuation is displayed as a note but remains part of the original semantic note, so it does not add another attack or expected tap. Ties never connect to rests or continue beyond the four-measure question.
+
+Every rendered beat remains exactly `12 ticks`, including beats rewritten to contain ties. Rewriting a beat must leave only supported notation durations (`3`, `4`, `6`, `9`, or `12` ticks); it must not leave one- or two-tick fragments. Jianpu and staff notation consume the same event timeline, so both views must preserve the same beat totals and attack positions.
