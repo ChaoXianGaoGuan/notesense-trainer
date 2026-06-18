@@ -12,6 +12,7 @@ export type RhythmTemplate = {
   label: string
   description: string
   cells: RhythmGrid
+  patternIds: readonly string[]
 }
 
 export type RhythmHitStatus = 'hit' | 'early' | 'late' | 'missed'
@@ -92,7 +93,9 @@ const UNITS: RhythmUnit[] = [
   { kind: 'note', durationTicks: 4, label: '三连音', difficulty: 7, tuplet: 3 }
 ]
 
-const PATTERN_LIBRARY: Array<{ id: string; difficulty: RhythmDifficulty; label: string; units: RhythmUnit[] }> = [
+type RhythmPattern = { id: string; difficulty: RhythmDifficulty; label: string; units: RhythmUnit[] }
+
+const PATTERN_LIBRARY: RhythmPattern[] = [
   { id: 'quarter-note', difficulty: 1, label: '四分音符', units: [unit('四分音符')] },
   { id: 'quarter-rest', difficulty: 1, label: '四分休止', units: [unit('四分休止')] },
   { id: 'two-eighths', difficulty: 2, label: '二八节奏', units: [unit('八分音符'), unit('八分音符')] },
@@ -104,6 +107,16 @@ const PATTERN_LIBRARY: Array<{ id: string; difficulty: RhythmDifficulty; label: 
   { id: 'small-syncopation', difficulty: 6, label: '小切分', units: [unit('八分音符'), unit('四分音符'), unit('八分音符')] },
   { id: 'eighth-triplet', difficulty: 7, label: '三连音', units: [unit('三连音'), unit('三连音'), unit('三连音')] }
 ]
+
+const FOCUS_PATTERN_IDS: Record<RhythmDifficulty, readonly string[]> = {
+  1: ['quarter-note'],
+  2: ['two-eighths'],
+  3: ['four-sixteenths'],
+  4: ['eighth-two-sixteenths', 'two-sixteenths-eighth'],
+  5: ['front-dotted', 'back-dotted'],
+  6: ['small-syncopation'],
+  7: ['eighth-triplet']
+}
 
 export function getTicksPerBeat(): number {
   return TICKS_PER_QUARTER
@@ -126,7 +139,7 @@ export function getTemplatesForDifficulty(difficulty: RhythmDifficulty, meter: R
 }
 
 export function buildRhythmTemplate(difficulty: RhythmDifficulty, meter: RhythmMeter, variant = 0): RhythmTemplate {
-  const cells = buildCellsForDifficulty(difficulty, meter, variant)
+  const { cells, patternIds } = buildCellsForDifficulty(difficulty, meter, variant)
   const label = difficulty === 7 ? '三连音' : RHYTHM_DIFFICULTY_DESCRIPTIONS[difficulty].split('，')[0]
   return {
     id: `${meter}-${difficulty}-${variant}-${cells.join('')}`,
@@ -134,7 +147,8 @@ export function buildRhythmTemplate(difficulty: RhythmDifficulty, meter: RhythmM
     meter,
     label,
     description: `${meter} · 四小节 · ${RHYTHM_DIFFICULTY_DESCRIPTIONS[difficulty]}`,
-    cells
+    cells,
+    patternIds
   }
 }
 
@@ -285,15 +299,23 @@ function unit(label: string): RhythmUnit {
   return found
 }
 
-function buildCellsForDifficulty(difficulty: RhythmDifficulty, meter: RhythmMeter, variant: number): RhythmCell[] {
+function buildCellsForDifficulty(
+  difficulty: RhythmDifficulty,
+  meter: RhythmMeter,
+  variant: number
+): { cells: RhythmCell[]; patternIds: string[] } {
   const ticksPerBar = getTicksPerBar(meter)
   const totalTicks = getTotalTicks(meter)
   const cells: RhythmCell[] = []
   const allowedPatterns = PATTERN_LIBRARY.filter((pattern) => pattern.difficulty <= difficulty)
+  const focusPatterns = FOCUS_PATTERN_IDS[difficulty].map(findPattern)
+  const patternIds: string[] = []
   let cursor = 0
   let restInserted = false
 
   while (cursor < totalTicks) {
+    const barIndex = Math.floor(cursor / ticksPerBar)
+    const tickInBar = cursor % ticksPerBar
     const barRemaining = ticksPerBar - (cursor % ticksPerBar)
     const candidates = allowedPatterns.filter((pattern) => patternDuration(pattern.units) <= barRemaining)
     if (candidates.length === 0) {
@@ -302,12 +324,22 @@ function buildCellsForDifficulty(difficulty: RhythmDifficulty, meter: RhythmMete
       cursor += barRemaining
       continue
     }
-    const needRest: boolean = !restInserted && totalTicks - cursor <= ticksPerBar
+
+    // The first three bars explicitly practise the selected level. The last bar
+    // stays available for cumulative material and the required rest.
+    const focusPattern = tickInBar === 0 && barIndex < BARS_PER_QUESTION - 1
+      ? focusPatterns[(barIndex + variant) % focusPatterns.length]
+      : null
+    const fittingFocusPattern = focusPattern && patternDuration(focusPattern.units) <= barRemaining
+      ? focusPattern
+      : null
+    const needRest = !restInserted && barIndex === BARS_PER_QUESTION - 1
     const restPattern = candidates.find((pattern) => pattern.units.every((rhythmUnit) => rhythmUnit.kind === 'rest'))
-    const pattern: { id: string; difficulty: RhythmDifficulty; label: string; units: RhythmUnit[] } = needRest && restPattern
+    const pattern: RhythmPattern = fittingFocusPattern ?? (needRest && restPattern
       ? restPattern
-      : candidates[Math.floor(variant + cursor / 3 + difficulty) % candidates.length]
+      : candidates[Math.floor(variant * 5 + cursor / TICKS_PER_QUARTER + difficulty) % candidates.length])
     const units: RhythmUnit[] = pattern.units
+    patternIds.push(pattern.id)
     for (const rhythmUnit of units) {
       appendUnit(cells, rhythmUnit)
       restInserted ||= rhythmUnit.kind === 'rest'
@@ -322,7 +354,13 @@ function buildCellsForDifficulty(difficulty: RhythmDifficulty, meter: RhythmMete
       trimmed[index] = 'hold'
     }
   }
-  return trimmed
+  return { cells: trimmed, patternIds }
+}
+
+function findPattern(id: string): RhythmPattern {
+  const pattern = PATTERN_LIBRARY.find((candidate) => candidate.id === id)
+  if (!pattern) throw new Error(`Unknown rhythm pattern: ${id}`)
+  return pattern
 }
 
 function appendUnit(cells: RhythmCell[], rhythmUnit: RhythmUnit): void {

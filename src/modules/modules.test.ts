@@ -1,5 +1,5 @@
 import { buildDegreeChord, buildMajorScale, findMajorKeysForTriad } from '../core/major-keys'
-import { layoutJianpuRhythm } from '../core/jianpu-rhythm'
+import { getJianpuMeasuresPerRow, layoutJianpuRhythm } from '../core/jianpu-rhythm'
 import { getNaturalNoteFromPitch } from '../core/notes'
 import {
   buildRelativePitchPatterns,
@@ -196,13 +196,41 @@ describe('syncopation trainer', () => {
     expect(generateSyncopationQuestion({ ...settings, difficulty: 7 }).description).toContain('三连音')
   })
 
-  it('uses cumulative rhythm material through seven difficulties', () => {
-    expect(getTemplatesForDifficulty(1, '4/4').every((template) => rhythmToNotationEvents(template.cells).every((event) => event.durationTicks % 12 === 0))).toBe(true)
-    expect(getTemplatesForDifficulty(2, '4/4').some((template) => rhythmToNotationEvents(template.cells).some((event) => event.durationTicks === 6))).toBe(true)
-    expect(getTemplatesForDifficulty(3, '4/4').some((template) => rhythmToNotationEvents(template.cells).some((event) => event.durationTicks === 3))).toBe(true)
-    expect(getTemplatesForDifficulty(5, '4/4').some((template) => rhythmToNotationEvents(template.cells).some((event) => event.durationTicks === 9))).toBe(true)
-    expect(getTemplatesForDifficulty(6, '4/4').some((template) => rhythmToNotationEvents(template.cells).some((event) => event.durationTicks === 6))).toBe(true)
-    expect(getTemplatesForDifficulty(7, '4/4').some((template) => rhythmToNotationEvents(template.cells).some((event) => event.durationTicks === 4 && event.tuplet === 3))).toBe(true)
+  it('guarantees the selected level material while mixing only current and earlier patterns', () => {
+    const patternDifficulty: Record<string, number> = {
+      'quarter-note': 1,
+      'quarter-rest': 1,
+      'two-eighths': 2,
+      'four-sixteenths': 3,
+      'eighth-two-sixteenths': 4,
+      'two-sixteenths-eighth': 4,
+      'front-dotted': 5,
+      'back-dotted': 5,
+      'small-syncopation': 6,
+      'eighth-triplet': 7
+    }
+    const focusPatterns: Record<number, string[]> = {
+      1: ['quarter-note'],
+      2: ['two-eighths'],
+      3: ['four-sixteenths'],
+      4: ['eighth-two-sixteenths', 'two-sixteenths-eighth'],
+      5: ['front-dotted', 'back-dotted'],
+      6: ['small-syncopation'],
+      7: ['eighth-triplet']
+    }
+
+    for (const difficulty of [1, 2, 3, 4, 5, 6, 7] as const) {
+      for (const template of getTemplatesForDifficulty(difficulty, '4/4')) {
+        expect(template.patternIds.every((id) => patternDifficulty[id] <= difficulty)).toBe(true)
+        for (const focusPattern of focusPatterns[difficulty]) {
+          expect(template.patternIds).toContain(focusPattern)
+        }
+      }
+    }
+
+    const dottedTemplates = getTemplatesForDifficulty(5, '4/4')
+    expect(dottedTemplates.every((template) => template.patternIds.includes('front-dotted'))).toBe(true)
+    expect(dottedTemplates.every((template) => template.patternIds.includes('back-dotted'))).toBe(true)
   })
 
   it('keeps small syncopation inside bar boundaries and triplets on third-beat ticks', () => {
@@ -285,7 +313,8 @@ describe('syncopation trainer', () => {
       label: 'test',
       description: 'test',
       meter: '4/4',
-      cells: ['attack', ...Array(11).fill('hold')]
+      cells: ['attack', ...Array(11).fill('hold')],
+      patternIds: ['quarter-note']
     } as const
 
     expect(checkSyncopationAnswer(question, 60, [140]).correct).toBe(false)
@@ -304,6 +333,43 @@ describe('syncopation trainer', () => {
     expect(layout.glyphs.filter((glyph) => glyph.kind === 'rest' && glyph.underlineLevel === 0)).not.toHaveLength(0)
     expect(layout.glyphs.filter((glyph) => glyph.kind === 'note' && glyph.underlineLevel === 2)).toHaveLength(4)
     expect(layout.underlines.filter((line) => line.level === 2).length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('keeps dense sixteenth-note glyphs inside their beat without overlap', () => {
+    const oneBar = Array.from({ length: 16 }, () => ['attack', 'hold', 'hold']).flat()
+    const layout = layoutJianpuRhythm([...oneBar, ...oneBar, ...oneBar, ...oneBar], '4/4', null, { standard: null, user: null }, { measuresPerRow: 1 })
+    expect(new Set(layout.measureLabels.map((label) => label.y)).size).toBe(4)
+
+    for (let beat = 0; beat < 16; beat += 1) {
+      const glyphs = layout.glyphs
+        .filter((glyph) => Math.floor(glyph.startTick / 12) === beat)
+        .sort((left, right) => left.x - right.x)
+      expect(glyphs).toHaveLength(4)
+      for (let index = 1; index < glyphs.length; index += 1) {
+        expect(glyphs[index].x - glyphs[index - 1].x).toBeGreaterThanOrEqual(glyphs[index].width)
+      }
+    }
+  })
+
+  it('uses phone score layout even when a touch phone requests desktop mode', () => {
+    expect(getJianpuMeasuresPerRow({
+      viewportWidth: 980,
+      physicalScreenWidth: 980,
+      maxTouchPoints: 5,
+      coarsePointer: true
+    })).toBe(1)
+    expect(getJianpuMeasuresPerRow({
+      viewportWidth: 820,
+      physicalScreenWidth: 820,
+      maxTouchPoints: 0,
+      coarsePointer: false
+    })).toBe(2)
+    expect(getJianpuMeasuresPerRow({
+      viewportWidth: 1280,
+      physicalScreenWidth: 1280,
+      maxTouchPoints: 0,
+      coarsePointer: false
+    })).toBe(4)
   })
 
   it('marks dotted and tuplet jianpu glyphs without connecting across beats', () => {

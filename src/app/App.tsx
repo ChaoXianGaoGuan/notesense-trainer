@@ -5,7 +5,7 @@ import { inputAnalyzer } from '../audio/input-analyzer'
 import { metronome } from '../audio/metronome'
 import { CHORD_LABELS } from '../core/chords'
 import { INTERVAL_LABELS } from '../core/intervals'
-import { layoutJianpuRhythm } from '../core/jianpu-rhythm'
+import { getJianpuMeasuresPerRow, layoutJianpuRhythm } from '../core/jianpu-rhythm'
 import { DEGREE_ROMANS, getMajorKeyGroups, type MajorKey } from '../core/major-keys'
 import { SOLFEGE_OPTIONS, solfegeToOctavePitch } from '../core/notes'
 import {
@@ -1370,7 +1370,7 @@ function JianpuRhythm({
   evaluation: RhythmEvaluation | null
   activeCells: RhythmActiveCells
 }) {
-  const measuresPerRow = useNarrowViewport() ? 2 : 4
+  const measuresPerRow = useJianpuMeasuresPerRow()
   const layout = layoutJianpuRhythm(cells, meter, evaluation, activeCells, { measuresPerRow })
   return (
     <div className="jianpu-rhythm" aria-label="简谱节奏型">
@@ -1423,23 +1423,37 @@ function JianpuRhythm({
           />
         ))}
       </svg>
-      <RhythmFeedbackGrid cells={cells} meter={meter} evaluation={evaluation} activeCells={activeCells} />
+      {(evaluation || activeCells.standard !== null || activeCells.user !== null) && (
+        <RhythmFeedbackGrid cells={cells} meter={meter} evaluation={evaluation} activeCells={activeCells} />
+      )}
     </div>
   )
 }
 
-function useNarrowViewport() {
-  const [isNarrow, setIsNarrow] = useState(() => typeof window !== 'undefined' ? window.matchMedia('(max-width: 700px)').matches : false)
+function useJianpuMeasuresPerRow(): 1 | 2 | 4 {
+  const getMeasuresPerRow = (): 1 | 2 | 4 => {
+    if (typeof window === 'undefined') return 4
+    return getJianpuMeasuresPerRow({
+      viewportWidth: window.innerWidth,
+      physicalScreenWidth: Math.min(window.screen.width, window.screen.height),
+      maxTouchPoints: navigator.maxTouchPoints,
+      coarsePointer: window.matchMedia('(pointer: coarse)').matches
+    })
+  }
+  const [measuresPerRow, setMeasuresPerRow] = useState<1 | 2 | 4>(getMeasuresPerRow)
 
   useEffect(() => {
-    const query = window.matchMedia('(max-width: 700px)')
-    const update = () => setIsNarrow(query.matches)
+    const update = () => setMeasuresPerRow(getMeasuresPerRow())
     update()
-    query.addEventListener('change', update)
-    return () => query.removeEventListener('change', update)
+    window.addEventListener('resize', update)
+    window.screen.orientation?.addEventListener('change', update)
+    return () => {
+      window.removeEventListener('resize', update)
+      window.screen.orientation?.removeEventListener('change', update)
+    }
   }, [])
 
-  return isNarrow
+  return measuresPerRow
 }
 
 function StaffRhythm({
@@ -1492,7 +1506,9 @@ function StaffRhythm({
   return (
     <div className="staff-rhythm" aria-label="五线谱节奏型">
       <div ref={containerRef} className="staff-canvas" />
-      <RhythmFeedbackGrid cells={cells} meter={meter} evaluation={evaluation} activeCells={activeCells} />
+      {(evaluation || activeCells.standard !== null || activeCells.user !== null) && (
+        <RhythmFeedbackGrid cells={cells} meter={meter} evaluation={evaluation} activeCells={activeCells} />
+      )}
     </div>
   )
 }

@@ -27,6 +27,7 @@ export type SyncopationQuestion = {
   description: string
   meter: SyncopationMeter
   cells: RhythmGrid
+  patternIds: readonly string[]
 }
 
 export type SyncopationSettings = {
@@ -76,7 +77,8 @@ export function generateSyncopationQuestion(
     label: template.label,
     description: template.description,
     meter: template.meter,
-    cells: template.cells
+    cells: template.cells,
+    patternIds: template.patternIds
   }
 }
 

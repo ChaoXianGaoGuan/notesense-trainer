@@ -58,7 +58,20 @@ export type JianpuRhythmLayout = {
 }
 
 type LayoutOptions = {
-  measuresPerRow: 2 | 4
+  measuresPerRow: 1 | 2 | 4
+}
+
+export function getJianpuMeasuresPerRow(options: {
+  viewportWidth: number
+  physicalScreenWidth: number
+  maxTouchPoints: number
+  coarsePointer: boolean
+}): 1 | 2 | 4 {
+  const isCoarseTouchDevice = options.maxTouchPoints > 0 && options.coarsePointer
+  const isTouchPhone = options.maxTouchPoints > 0 && options.physicalScreenWidth <= 700
+  if (options.viewportWidth <= 560 || isTouchPhone || isCoarseTouchDevice) return 1
+  if (options.viewportWidth <= 900) return 2
+  return 4
 }
 
 type BeatGroup = {
@@ -79,7 +92,7 @@ const BAR_BOTTOM_OFFSET = 118
 const UNDERLINE_START_OFFSET = 24
 const UNDERLINE_GAP = 7
 const HIGHLIGHT_WIDTH = 28
-const MIN_SYMBOL_SPACING = 32
+const BEAT_WIDTH = 112
 
 export function layoutJianpuRhythm(
   cells: RhythmGrid,
@@ -92,7 +105,7 @@ export function layoutJianpuRhythm(
   const ticksPerBar = getTicksPerBar(meter)
   const ticksPerBeat = getTicksPerBeat()
   const rows = Math.ceil(BARS_PER_QUESTION / options.measuresPerRow)
-  const measureWidth = beatsPerBar * 86
+  const measureWidth = beatsPerBar * BEAT_WIDTH
   const width = LEFT + RIGHT + measureWidth * options.measuresPerRow
   const height = TOP + rows * ROW_HEIGHT + (rows - 1) * ROW_GAP
   const glyphs: JianpuRhythmGlyph[] = []
@@ -168,7 +181,7 @@ export function layoutJianpuRhythm(
   return {
     width,
     height,
-    noteFontSize: options.measuresPerRow === 2 ? 26 : 24,
+    noteFontSize: options.measuresPerRow === 1 ? 28 : options.measuresPerRow === 2 ? 26 : 24,
     glyphs,
     underlines: buildUnderlineSegments(groupGlyphsByBeat(glyphs, meter), options.measuresPerRow),
     guideLines,
@@ -194,11 +207,8 @@ function splitRestForTeaching(event: { kind: 'note' | 'rest'; start: number; dur
 
 function distributeCenters(startX: number, beatWidth: number, count: number): number[] {
   if (count === 0) return []
-  if (count === 1) return [startX + beatWidth / 2]
-  const slot = Math.max(MIN_SYMBOL_SPACING, beatWidth / count)
-  const total = slot * (count - 1)
-  const first = startX + beatWidth / 2 - total / 2
-  return Array.from({ length: count }, (_, index) => first + index * slot)
+  const slot = beatWidth / count
+  return Array.from({ length: count }, (_, index) => startX + slot * (index + 0.5))
 }
 
 function getUnderlineLevel(durationTicks: number): 0 | 1 | 2 {
@@ -240,7 +250,7 @@ function groupGlyphsByBeat(glyphs: JianpuRhythmGlyph[], meter: RhythmMeter): Bea
   }))
 }
 
-function buildUnderlineSegments(groups: BeatGroup[], measuresPerRow: 2 | 4): JianpuUnderlineSegment[] {
+function buildUnderlineSegments(groups: BeatGroup[], measuresPerRow: 1 | 2 | 4): JianpuUnderlineSegment[] {
   return groups.flatMap((group) => {
     const segments: JianpuUnderlineSegment[] = []
     for (const level of [1, 2] as const) {
@@ -262,7 +272,7 @@ function buildUnderlineSegments(groups: BeatGroup[], measuresPerRow: 2 | 4): Jia
   })
 }
 
-function createUnderlineRunSegments(run: JianpuRhythmGlyph[], level: 1 | 2, group: BeatGroup, measuresPerRow: 2 | 4): JianpuUnderlineSegment[] {
+function createUnderlineRunSegments(run: JianpuRhythmGlyph[], level: 1 | 2, group: BeatGroup, measuresPerRow: 1 | 2 | 4): JianpuUnderlineSegment[] {
   if (run.length === 0) return []
   const first = run[0]
   const last = run[run.length - 1]
