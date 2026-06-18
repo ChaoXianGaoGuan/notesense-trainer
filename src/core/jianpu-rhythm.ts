@@ -36,6 +36,16 @@ export type JianpuTie = {
   controlY: number
 }
 
+export type JianpuTuplet = {
+  id: string
+  x1: number
+  x2: number
+  y: number
+  controlY: number
+  labelX: number
+  labelY: number
+}
+
 export type JianpuUnderlineSegment = {
   id: string
   level: 1 | 2
@@ -66,6 +76,7 @@ export type JianpuRhythmLayout = {
   glyphs: JianpuRhythmGlyph[]
   underlines: JianpuUnderlineSegment[]
   ties: JianpuTie[]
+  tuplets: JianpuTuplet[]
   guideLines: JianpuGuideLine[]
   measureLabels: JianpuMeasureLabel[]
 }
@@ -189,13 +200,15 @@ export function layoutJianpuRhythm(
     }
   }
 
+  const beatGroups = groupGlyphsByBeat(glyphs, meter)
   return {
     width,
     height,
     noteFontSize: options.measuresPerRow === 1 ? 28 : options.measuresPerRow === 2 ? 26 : 24,
     glyphs,
-    underlines: buildUnderlineSegments(groupGlyphsByBeat(glyphs, meter), options.measuresPerRow),
+    underlines: buildUnderlineSegments(beatGroups, options.measuresPerRow),
     ties: buildTies(glyphs),
+    tuplets: buildTuplets(beatGroups),
     guideLines,
     measureLabels
   }
@@ -229,6 +242,25 @@ function buildTies(glyphs: JianpuRhythmGlyph[]): JianpuTie[] {
         controlY: left.y - 34
       }]
     })
+  })
+}
+
+function buildTuplets(groups: BeatGroup[]): JianpuTuplet[] {
+  return groups.flatMap((group) => {
+    const glyphs = group.glyphs.filter((glyph) => glyph.tuplet === 3)
+    if (glyphs.length !== 3) return []
+    const first = glyphs[0]
+    const last = glyphs[2]
+    const labelX = (first.x + last.x) / 2
+    return [{
+      id: `tuplet-${group.measureIndex}-${group.beatIndex}`,
+      x1: first.x - 10,
+      x2: last.x + 10,
+      y: first.y - 24,
+      controlY: first.y - 43,
+      labelX,
+      labelY: first.y - 35
+    }]
   })
 }
 

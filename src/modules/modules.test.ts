@@ -423,6 +423,8 @@ describe('syncopation trainer', () => {
     const layout = layoutJianpuRhythm(cells, '2/4', null, { standard: null, user: null }, { measuresPerRow: 4 })
     expect(layout.glyphs.some((glyph) => glyph.dotted)).toBe(true)
     expect(layout.glyphs.filter((glyph) => glyph.tuplet === 3)).toHaveLength(3)
+    expect(layout.tuplets).toHaveLength(1)
+    expect(layout.tuplets[0].x2).toBeGreaterThan(layout.tuplets[0].x1)
     const firstBeatUnderlines = layout.underlines.filter((line) => line.id.includes('-0-0-'))
     const secondBeatUnderlines = layout.underlines.filter((line) => line.id.includes('-0-1-'))
     expect(firstBeatUnderlines.length).toBeGreaterThan(0)

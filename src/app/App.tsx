@@ -1406,6 +1406,15 @@ function JianpuRhythm({
             className="jianpu-tie"
           />
         ))}
+        {layout.tuplets.map((tuplet) => (
+          <g key={tuplet.id} className="jianpu-tuplet">
+            <path
+              d={`M ${tuplet.x1} ${tuplet.y} Q ${(tuplet.x1 + tuplet.x2) / 2} ${tuplet.controlY} ${tuplet.x2} ${tuplet.y}`}
+              className="jianpu-tuplet-arc"
+            />
+            <text x={tuplet.labelX} y={tuplet.labelY} className="jianpu-triplet">3</text>
+          </g>
+        ))}
         {layout.glyphs.map((glyph) => {
           const textClass = ['jianpu-symbol', glyph.kind === 'rest' ? 'rest' : 'note', glyph.state].filter(Boolean).join(' ')
           const markClass = ['jianpu-event-highlight', glyph.state].filter(Boolean).join(' ')
@@ -1421,7 +1430,6 @@ function JianpuRhythm({
                   className={markClass}
                 />
               )}
-              {glyph.tuplet && <text x={glyph.x} y={glyph.y - 36} className="jianpu-triplet">3</text>}
               <text x={glyph.x} y={glyph.y} className={textClass} style={{ fontSize: layout.noteFontSize }}>
                 {glyph.kind === 'note' ? 'X' : '0'}
               </text>
@@ -1485,7 +1493,7 @@ function StaffRhythm({
     let cancelled = false
     async function renderStaff() {
       if (!containerRef.current) return
-      const { Formatter, Renderer, Stave, StaveNote, StaveTie, Voice } = await import('vexflow')
+      const { Formatter, Renderer, Stave, StaveNote, StaveTie, Tuplet, Voice } = await import('vexflow')
       if (cancelled || !containerRef.current) return
       containerRef.current.innerHTML = ''
       const renderer = new Renderer(containerRef.current, Renderer.Backends.SVG)
@@ -1504,6 +1512,17 @@ function StaffRhythm({
           clef: 'percussion'
         })
       })
+      const tuplets = []
+      for (let index = 0; index <= renderEvents.length - 3; index += 1) {
+        if (!renderEvents.slice(index, index + 3).every((event) => event.tuplet === 3)) continue
+        tuplets.push(new Tuplet(notes.slice(index, index + 3), {
+          numNotes: 3,
+          notesOccupied: 2,
+          bracketed: true,
+          ratioed: false
+        }))
+        index += 2
+      }
       const voice = new Voice({ numBeats: cells.length / 12, beatValue: 4 }).setStrict(false)
       voice.addTickables(notes)
       new Formatter().joinVoices([voice]).format([voice], 960)
@@ -1517,6 +1536,7 @@ function StaffRhythm({
           lastIndexes: [0]
         }).setContext(context).draw()
       })
+      tuplets.forEach((tuplet) => tuplet.setContext(context).draw())
     }
 
     void renderStaff()

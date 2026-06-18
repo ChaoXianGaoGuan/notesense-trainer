@@ -100,3 +100,5 @@ The cumulative levels are:
 ```
 
 The middle quarter note of large syncopation begins off the beat and crosses the next beat boundary. In teaching notation it is rendered as two tied eighth notes so the beat boundary remains visible. The second displayed eighth is only a continuation: it does not create another attack or another expected user tap.
+
+An eighth-note triplet is displayed as one group: an arc spans the first through third notes and a single `3` appears at the center of the arc. It is not labeled with a separate `3` over every note.
