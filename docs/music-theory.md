@@ -81,3 +81,22 @@ C4 D4 E4 F4 G4 A4 B4 C5
 ```
 
 Each lead-in scale note lasts `160ms`, with `50ms` after each note. The global duration slider controls the final reference note and target/melody notes, not the scale lead-in.
+
+## Rhythm Training
+
+Rhythm questions use 2/4, 3/4, or 4/4 and always contain four measures. Each difficulty may mix material from earlier levels, but every question must include its selected level's focus pattern.
+
+The cumulative levels are:
+
+```text
+1  quarter notes and rests
+2  two eighth notes
+3  four sixteenth notes
+4  eighth + two sixteenths / two sixteenths + eighth
+5  front-dotted / back-dotted patterns
+6  small syncopation: sixteenth + eighth + sixteenth (one beat)
+7  eighth-note triplets
+8  large syncopation: eighth + quarter + eighth (two beats)
+```
+
+The middle quarter note of large syncopation begins off the beat and crosses the next beat boundary. In teaching notation it is rendered as two tied eighth notes so the beat boundary remains visible. The second displayed eighth is only a continuation: it does not create another attack or another expected user tap.
