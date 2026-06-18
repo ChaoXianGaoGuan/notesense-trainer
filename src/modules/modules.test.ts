@@ -351,24 +351,18 @@ describe('syncopation trainer', () => {
     }
   })
 
-  it('uses phone score layout even when a touch phone requests desktop mode', () => {
+  it('uses the reported viewport width so phone desktop mode stays compact', () => {
     expect(getJianpuMeasuresPerRow({
-      viewportWidth: 980,
-      physicalScreenWidth: 980,
-      maxTouchPoints: 5,
-      coarsePointer: true
-    })).toBe(1)
+      viewportWidth: 980
+    })).toBe(4)
     expect(getJianpuMeasuresPerRow({
-      viewportWidth: 820,
-      physicalScreenWidth: 820,
-      maxTouchPoints: 0,
-      coarsePointer: false
+      viewportWidth: 820
     })).toBe(2)
     expect(getJianpuMeasuresPerRow({
-      viewportWidth: 1280,
-      physicalScreenWidth: 1280,
-      maxTouchPoints: 0,
-      coarsePointer: false
+      viewportWidth: 390
+    })).toBe(1)
+    expect(getJianpuMeasuresPerRow({
+      viewportWidth: 1280
     })).toBe(4)
   })
 

@@ -1434,10 +1434,7 @@ function useJianpuMeasuresPerRow(): 1 | 2 | 4 {
   const getMeasuresPerRow = (): 1 | 2 | 4 => {
     if (typeof window === 'undefined') return 4
     return getJianpuMeasuresPerRow({
-      viewportWidth: window.innerWidth,
-      physicalScreenWidth: Math.min(window.screen.width, window.screen.height),
-      maxTouchPoints: navigator.maxTouchPoints,
-      coarsePointer: window.matchMedia('(pointer: coarse)').matches
+      viewportWidth: window.innerWidth
     })
   }
   const [measuresPerRow, setMeasuresPerRow] = useState<1 | 2 | 4>(getMeasuresPerRow)
@@ -1446,10 +1443,8 @@ function useJianpuMeasuresPerRow(): 1 | 2 | 4 {
     const update = () => setMeasuresPerRow(getMeasuresPerRow())
     update()
     window.addEventListener('resize', update)
-    window.screen.orientation?.addEventListener('change', update)
     return () => {
       window.removeEventListener('resize', update)
-      window.screen.orientation?.removeEventListener('change', update)
     }
   }, [])
 

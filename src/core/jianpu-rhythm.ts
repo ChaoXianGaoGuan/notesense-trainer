@@ -63,13 +63,8 @@ type LayoutOptions = {
 
 export function getJianpuMeasuresPerRow(options: {
   viewportWidth: number
-  physicalScreenWidth: number
-  maxTouchPoints: number
-  coarsePointer: boolean
 }): 1 | 2 | 4 {
-  const isCoarseTouchDevice = options.maxTouchPoints > 0 && options.coarsePointer
-  const isTouchPhone = options.maxTouchPoints > 0 && options.physicalScreenWidth <= 700
-  if (options.viewportWidth <= 560 || isTouchPhone || isCoarseTouchDevice) return 1
+  if (options.viewportWidth <= 560) return 1
   if (options.viewportWidth <= 900) return 2
   return 4
 }
