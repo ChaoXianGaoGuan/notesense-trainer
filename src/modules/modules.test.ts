@@ -19,7 +19,8 @@ import {
   getTargetTimesMs,
   getTemplatesForDifficulty,
   getTotalTicks,
-  rhythmToNotationEvents
+  rhythmToNotationEvents,
+  splitRhythmEventsAtBeatBoundaries
 } from '../core/rhythm'
 import { DEFAULT_PREFERENCES, normalizePreferences, type AppPreferences } from '../state/defaults'
 import { recordAnswer, resetStats } from '../state/stats'
@@ -175,7 +176,7 @@ describe('interval trainer', () => {
 describe('syncopation trainer', () => {
   it('generates four-bar templates for each meter and difficulty', () => {
     for (const meter of ['2/4', '3/4', '4/4'] as const) {
-      for (const difficulty of [1, 2, 3, 4, 5, 6, 7] as const) {
+      for (const difficulty of [1, 2, 3, 4, 5, 6, 7, 8] as const) {
         const templates = getTemplatesForDifficulty(difficulty, meter)
         expect(templates.length).toBeGreaterThan(0)
         for (const template of templates) {
@@ -195,6 +196,7 @@ describe('syncopation trainer', () => {
     expect(getTemplatesForDifficulty(1, '4/4').map((template) => template.id)).toContain(first.templateId)
     expect(second.templateId).not.toBe(first.templateId)
     expect(generateSyncopationQuestion({ ...settings, difficulty: 7 }).description).toContain('三连音')
+    expect(generateSyncopationQuestion({ ...settings, difficulty: 8 }).description).toContain('大切分')
   })
 
   it('guarantees the selected level material while mixing only current and earlier patterns', () => {
@@ -208,7 +210,8 @@ describe('syncopation trainer', () => {
       'front-dotted': 5,
       'back-dotted': 5,
       'small-syncopation': 6,
-      'eighth-triplet': 7
+      'eighth-triplet': 7,
+      'large-syncopation': 8
     }
     const focusPatterns: Record<number, string[]> = {
       1: ['quarter-note'],
@@ -217,10 +220,11 @@ describe('syncopation trainer', () => {
       4: ['eighth-two-sixteenths', 'two-sixteenths-eighth'],
       5: ['front-dotted', 'back-dotted'],
       6: ['small-syncopation'],
-      7: ['eighth-triplet']
+      7: ['eighth-triplet'],
+      8: ['large-syncopation']
     }
 
-    for (const difficulty of [1, 2, 3, 4, 5, 6, 7] as const) {
+    for (const difficulty of [1, 2, 3, 4, 5, 6, 7, 8] as const) {
       for (const template of getTemplatesForDifficulty(difficulty, '4/4')) {
         expect(template.patternIds.every((id) => patternDifficulty[id] <= difficulty)).toBe(true)
         for (const focusPattern of focusPatterns[difficulty]) {
@@ -234,14 +238,43 @@ describe('syncopation trainer', () => {
     expect(dottedTemplates.every((template) => template.patternIds.includes('back-dotted'))).toBe(true)
   })
 
-  it('keeps small syncopation inside bar boundaries and triplets on third-beat ticks', () => {
-    const ticksPerBar = getTicksPerBar('4/4')
-    const smallSyncopationEvents = getTemplatesForDifficulty(6, '4/4').flatMap((template) => rhythmToNotationEvents(template.cells))
-    expect(smallSyncopationEvents.some((event) => event.durationTicks === 12 && event.start % ticksPerBar <= ticksPerBar - 12)).toBe(true)
+  it('defines small and large syncopation with the correct durations', () => {
+    for (const template of getTemplatesForDifficulty(6, '4/4')) {
+      expect(rhythmToNotationEvents(template.cells).slice(0, 3).map((event) => event.durationTicks)).toEqual([3, 6, 3])
+    }
 
+    for (const template of getTemplatesForDifficulty(8, '4/4')) {
+      expect(rhythmToNotationEvents(template.cells).slice(0, 3).map((event) => event.durationTicks)).toEqual([6, 12, 6])
+    }
+  })
+
+  it('splits the large-syncopation offbeat quarter at the beat boundary with a tie', () => {
+    const events = rhythmToNotationEvents(cellsFromEvents([
+      ['note', 6],
+      ['note', 12],
+      ['note', 6]
+    ]))
+    const renderEvents = splitRhythmEventsAtBeatBoundaries(events)
+    expect(renderEvents.map((event) => event.durationTicks)).toEqual([6, 6, 6, 6])
+    expect(renderEvents.filter((event) => event.sourceStart === 6)).toMatchObject([
+      { start: 6, durationTicks: 6, tieStart: true, tieEnd: false },
+      { start: 12, durationTicks: 6, tieStart: false, tieEnd: true }
+    ])
+
+    const layout = layoutJianpuRhythm(cellsFromEvents([
+      ['note', 6],
+      ['note', 12],
+      ['note', 6]
+    ]), '2/4', null, { standard: null, user: null }, { measuresPerRow: 1 })
+    expect(layout.ties).toHaveLength(1)
+  })
+
+  it('keeps triplets on third-beat ticks', () => {
+    const ticksPerBar = getTicksPerBar('4/4')
     const tripletEvents = getTemplatesForDifficulty(7, '4/4').flatMap((template) => rhythmToNotationEvents(template.cells)).filter((event) => event.tuplet === 3)
     expect(tripletEvents.length).toBeGreaterThan(0)
     expect(tripletEvents.every((event) => event.start % 4 === 0)).toBe(true)
+    expect(tripletEvents.every((event) => event.start % ticksPerBar < ticksPerBar)).toBe(true)
   })
 
   it('converts bpm to target times on the tick timeline', () => {
@@ -304,7 +337,7 @@ describe('syncopation trainer', () => {
     const result = checkSyncopationAnswer(question, 80, [])
     expect(result.correct).toBe(false)
     expect(result.explanation).toContain('漏拍')
-    expect(getSyncopationStatsKey(7, 100, '2/4', 'count-in')).toBe('syncopation:7:100:2/4:count-in')
+    expect(getSyncopationStatsKey(8, 100, '2/4', 'count-in')).toBe('syncopation:8:100:2/4:count-in')
   })
 
   it('builds count-in-only and full-practice metronome timelines without answer taps', () => {
@@ -600,8 +633,8 @@ describe('state helpers', () => {
   })
 
   it('normalizes syncopation difficulty and input calibration', () => {
-    expect(normalizePreferences({ ...DEFAULT_PREFERENCES, syncopation: { difficulty: 7, bpm: 60, meter: '2/4', notation: 'jianpu', metronomeMode: 'count-in', inputCalibrationMs: 200 } }).syncopation).toMatchObject({
-      difficulty: 7,
+    expect(normalizePreferences({ ...DEFAULT_PREFERENCES, syncopation: { difficulty: 8, bpm: 60, meter: '2/4', notation: 'jianpu', metronomeMode: 'count-in', inputCalibrationMs: 200 } }).syncopation).toMatchObject({
+      difficulty: 8,
       meter: '2/4',
       metronomeMode: 'count-in',
       inputCalibrationMs: 200

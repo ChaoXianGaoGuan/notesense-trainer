@@ -170,7 +170,7 @@ function isSupportedIntervalMode(value: unknown): value is IntervalMode {
 }
 
 function isSupportedSyncopationDifficulty(value: unknown): value is SyncopationDifficulty {
-  return value === 1 || value === 2 || value === 3 || value === 4 || value === 5 || value === 6 || value === 7
+  return value === 1 || value === 2 || value === 3 || value === 4 || value === 5 || value === 6 || value === 7 || value === 8
 }
 
 function isSupportedSyncopationBpm(value: unknown): value is SyncopationBpm {

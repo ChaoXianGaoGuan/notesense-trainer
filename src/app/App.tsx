@@ -15,6 +15,7 @@ import {
   getCountInDurationMs,
   getTicksPerBar,
   rhythmToNotationEvents,
+  splitRhythmEventsAtBeatBoundaries,
   type RhythmEvaluation,
   type RhythmMeter,
   type RhythmReplayEvent
@@ -1398,6 +1399,13 @@ function JianpuRhythm({
         {layout.measureLabels.map((label) => (
           <text key={label.id} x={label.x} y={label.y} className="jianpu-measure-label">{label.text}</text>
         ))}
+        {layout.ties.map((tie) => (
+          <path
+            key={tie.id}
+            d={`M ${tie.x1} ${tie.y} Q ${(tie.x1 + tie.x2) / 2} ${tie.controlY} ${tie.x2} ${tie.y}`}
+            className="jianpu-tie"
+          />
+        ))}
         {layout.glyphs.map((glyph) => {
           const textClass = ['jianpu-symbol', glyph.kind === 'rest' ? 'rest' : 'note', glyph.state].filter(Boolean).join(' ')
           const markClass = ['jianpu-event-highlight', glyph.state].filter(Boolean).join(' ')
@@ -1477,7 +1485,7 @@ function StaffRhythm({
     let cancelled = false
     async function renderStaff() {
       if (!containerRef.current) return
-      const { Formatter, Renderer, Stave, StaveNote, Voice } = await import('vexflow')
+      const { Formatter, Renderer, Stave, StaveNote, StaveTie, Voice } = await import('vexflow')
       if (cancelled || !containerRef.current) return
       containerRef.current.innerHTML = ''
       const renderer = new Renderer(containerRef.current, Renderer.Backends.SVG)
@@ -1487,7 +1495,8 @@ function StaffRhythm({
       stave.addClef('percussion').addTimeSignature(meter)
       stave.setContext(context).draw()
 
-      const notes = rhythmToNotationEvents(cells).map((event) => {
+      const renderEvents = splitRhythmEventsAtBeatBoundaries(rhythmToNotationEvents(cells))
+      const notes = renderEvents.map((event) => {
         const duration = event.durationTicks === 3 ? '16' : event.durationTicks === 4 ? '8' : event.durationTicks === 6 ? '8' : event.durationTicks === 9 ? '8d' : event.durationTicks === 12 ? 'q' : 'q'
         return new StaveNote({
           keys: ['b/4'],
@@ -1499,6 +1508,15 @@ function StaffRhythm({
       voice.addTickables(notes)
       new Formatter().joinVoices([voice]).format([voice], 960)
       voice.draw(context, stave)
+      renderEvents.forEach((event, index) => {
+        if (!event.tieStart || !notes[index + 1]) return
+        new StaveTie({
+          firstNote: notes[index],
+          lastNote: notes[index + 1],
+          firstIndexes: [0],
+          lastIndexes: [0]
+        }).setContext(context).draw()
+      })
     }
 
     void renderStaff()

@@ -3,6 +3,7 @@ import {
   getTicksPerBar,
   getTicksPerBeat,
   rhythmToNotationEvents,
+  splitRhythmEventsAtBeatBoundaries,
   type RhythmEvaluation,
   type RhythmGrid,
   type RhythmMeter
@@ -21,7 +22,18 @@ export type JianpuRhythmGlyph = {
   underlineLevel: 0 | 1 | 2
   dotted: boolean
   tuplet?: 3
+  sourceStartTick: number
+  tieStart: boolean
+  tieEnd: boolean
   state: JianpuGlyphState
+}
+
+export type JianpuTie = {
+  id: string
+  x1: number
+  x2: number
+  y: number
+  controlY: number
 }
 
 export type JianpuUnderlineSegment = {
@@ -53,6 +65,7 @@ export type JianpuRhythmLayout = {
   noteFontSize: number
   glyphs: JianpuRhythmGlyph[]
   underlines: JianpuUnderlineSegment[]
+  ties: JianpuTie[]
   guideLines: JianpuGuideLine[]
   measureLabels: JianpuMeasureLabel[]
 }
@@ -115,7 +128,7 @@ export function layoutJianpuRhythm(
     const noteY = rowY + NOTE_Y_OFFSET
     const measureStartTick = measureIndex * ticksPerBar
     const measureCells = cells.slice(measureStartTick, measureStartTick + ticksPerBar)
-    const events = rhythmToNotationEvents(measureCells).flatMap(splitRestForTeaching)
+    const events = splitRhythmEventsAtBeatBoundaries(rhythmToNotationEvents(measureCells), ticksPerBeat)
     const beatWidth = measureWidth / beatsPerBar
 
     guideLines.push({
@@ -167,6 +180,9 @@ export function layoutJianpuRhythm(
           underlineLevel: getUnderlineLevel(event.durationTicks),
           dotted: event.durationTicks === 9,
           tuplet: event.tuplet,
+          sourceStartTick: measureStartTick + event.sourceStart,
+          tieStart: event.tieStart,
+          tieEnd: event.tieEnd,
           state: getGlyphState(absoluteStart, event.durationTicks, event.kind, evaluation, active)
         })
       })
@@ -179,31 +195,41 @@ export function layoutJianpuRhythm(
     noteFontSize: options.measuresPerRow === 1 ? 28 : options.measuresPerRow === 2 ? 26 : 24,
     glyphs,
     underlines: buildUnderlineSegments(groupGlyphsByBeat(glyphs, meter), options.measuresPerRow),
+    ties: buildTies(glyphs),
     guideLines,
     measureLabels
   }
-}
-
-function splitRestForTeaching(event: { kind: 'note' | 'rest'; start: number; durationTicks: number; tuplet?: 3 }) {
-  if (event.kind === 'note') return [event]
-  const result: Array<{ kind: 'note' | 'rest'; start: number; durationTicks: number; tuplet?: 3 }> = []
-  let cursor = event.start
-  let remaining = event.durationTicks
-  for (const duration of [12, 6, 3]) {
-    while (remaining >= duration) {
-      result.push({ kind: 'rest', start: cursor, durationTicks: duration })
-      cursor += duration
-      remaining -= duration
-    }
-  }
-  if (remaining > 0) result.push({ kind: 'rest', start: cursor, durationTicks: remaining })
-  return result
 }
 
 function distributeCenters(startX: number, beatWidth: number, count: number): number[] {
   if (count === 0) return []
   const slot = beatWidth / count
   return Array.from({ length: count }, (_, index) => startX + slot * (index + 0.5))
+}
+
+function buildTies(glyphs: JianpuRhythmGlyph[]): JianpuTie[] {
+  const groups = new Map<number, JianpuRhythmGlyph[]>()
+  for (const glyph of glyphs) {
+    if (!glyph.tieStart && !glyph.tieEnd) continue
+    const group = groups.get(glyph.sourceStartTick) ?? []
+    group.push(glyph)
+    groups.set(glyph.sourceStartTick, group)
+  }
+
+  return [...groups.entries()].flatMap(([sourceStartTick, group]) => {
+    const parts = group.sort((left, right) => left.startTick - right.startTick)
+    return parts.slice(0, -1).flatMap((left, index) => {
+      const right = parts[index + 1]
+      if (!left.tieStart || !right.tieEnd || left.y !== right.y) return []
+      return [{
+        id: `tie-${sourceStartTick}-${index}`,
+        x1: left.x + 10,
+        x2: right.x - 10,
+        y: left.y - 18,
+        controlY: left.y - 34
+      }]
+    })
+  })
 }
 
 function getUnderlineLevel(durationTicks: number): 0 | 1 | 2 {

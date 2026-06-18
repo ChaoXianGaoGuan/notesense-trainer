@@ -56,7 +56,8 @@ export const SYNCOPATION_DIFFICULTY_LABELS: Record<SyncopationDifficulty, string
   4: '前八后十六/前十六后八',
   5: '前附点/后附点',
   6: '小切分',
-  7: '三连音'
+  7: '三连音',
+  8: '大切分'
 }
 
 export const SYNCOPATION_NOTATION_LABELS: Record<SyncopationNotation, string> = {

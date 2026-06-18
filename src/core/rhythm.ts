@@ -1,6 +1,6 @@
 export type RhythmCell = 'attack' | 'hold' | 'rest'
 export type RhythmGrid = readonly RhythmCell[]
-export type RhythmDifficulty = 1 | 2 | 3 | 4 | 5 | 6 | 7
+export type RhythmDifficulty = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
 export type RhythmBpm = 60 | 80 | 100
 export type RhythmMeter = '2/4' | '3/4' | '4/4'
 export type RhythmNotation = 'jianpu' | 'staff'
@@ -52,6 +52,12 @@ export type RhythmNotationEvent = {
   tuplet?: 3
 }
 
+export type RhythmRenderEvent = RhythmNotationEvent & {
+  sourceStart: number
+  tieStart: boolean
+  tieEnd: boolean
+}
+
 export type RhythmDemoEvent = {
   index: number
   timeMs: number
@@ -77,7 +83,7 @@ const BARS_PER_QUESTION = 4
 
 export const RHYTHM_BPM_OPTIONS: RhythmBpm[] = [60, 80, 100]
 export const RHYTHM_METERS: RhythmMeter[] = ['2/4', '3/4', '4/4']
-export const RHYTHM_DIFFICULTIES: RhythmDifficulty[] = [1, 2, 3, 4, 5, 6, 7]
+export const RHYTHM_DIFFICULTIES: RhythmDifficulty[] = [1, 2, 3, 4, 5, 6, 7, 8]
 
 export const RHYTHM_DIFFICULTY_DESCRIPTIONS: Record<RhythmDifficulty, string> = {
   1: '四分音符与四分休止符',
@@ -86,7 +92,8 @@ export const RHYTHM_DIFFICULTY_DESCRIPTIONS: Record<RhythmDifficulty, string> = 
   4: '前八后十六、前十六后八，可混入之前节奏',
   5: '前附点、后附点，可混入之前节奏',
   6: '小切分，可混入之前节奏',
-  7: '三连音，可混入之前节奏'
+  7: '三连音，可混入之前节奏',
+  8: '大切分，可混入之前节奏'
 }
 
 const UNITS: RhythmUnit[] = [
@@ -111,8 +118,9 @@ const PATTERN_LIBRARY: RhythmPattern[] = [
   { id: 'two-sixteenths-eighth', difficulty: 4, label: '前十六后八', units: [unit('十六分音符'), unit('十六分音符'), unit('八分音符')] },
   { id: 'front-dotted', difficulty: 5, label: '前附点', units: [unit('附点八分'), unit('十六分音符')] },
   { id: 'back-dotted', difficulty: 5, label: '后附点', units: [unit('十六分音符'), unit('附点八分')] },
-  { id: 'small-syncopation', difficulty: 6, label: '小切分', units: [unit('八分音符'), unit('四分音符'), unit('八分音符')] },
-  { id: 'eighth-triplet', difficulty: 7, label: '三连音', units: [unit('三连音'), unit('三连音'), unit('三连音')] }
+  { id: 'small-syncopation', difficulty: 6, label: '小切分', units: [unit('十六分音符'), unit('八分音符'), unit('十六分音符')] },
+  { id: 'eighth-triplet', difficulty: 7, label: '三连音', units: [unit('三连音'), unit('三连音'), unit('三连音')] },
+  { id: 'large-syncopation', difficulty: 8, label: '大切分', units: [unit('八分音符'), unit('四分音符'), unit('八分音符')] }
 ]
 
 const FOCUS_PATTERN_IDS: Record<RhythmDifficulty, readonly string[]> = {
@@ -122,7 +130,8 @@ const FOCUS_PATTERN_IDS: Record<RhythmDifficulty, readonly string[]> = {
   4: ['eighth-two-sixteenths', 'two-sixteenths-eighth'],
   5: ['front-dotted', 'back-dotted'],
   6: ['small-syncopation'],
-  7: ['eighth-triplet']
+  7: ['eighth-triplet'],
+  8: ['large-syncopation']
 }
 
 export function getTicksPerBeat(): number {
@@ -321,6 +330,45 @@ export function rhythmToNotationEvents(cells: RhythmGrid): RhythmNotationEvent[]
     index += durationTicks
   }
   return events
+}
+
+export function splitRhythmEventsAtBeatBoundaries(
+  events: RhythmNotationEvent[],
+  ticksPerBeat = TICKS_PER_QUARTER
+): RhythmRenderEvent[] {
+  return events.flatMap((event) => {
+    const eventEnd = event.start + event.durationTicks
+    const boundaries: number[] = []
+    for (let boundary = (Math.floor(event.start / ticksPerBeat) + 1) * ticksPerBeat; boundary < eventEnd; boundary += ticksPerBeat) {
+      boundaries.push(boundary)
+    }
+    const points = [event.start, ...boundaries, eventEnd]
+    const beatPieces = points.slice(0, -1).map((start, index) => ({
+      ...event,
+      start,
+      durationTicks: points[index + 1] - start,
+      sourceStart: event.start,
+      tieStart: event.kind === 'note' && index < points.length - 2,
+      tieEnd: event.kind === 'note' && index > 0
+    }))
+    return beatPieces.flatMap(splitRestRenderEvent)
+  })
+}
+
+function splitRestRenderEvent(event: RhythmRenderEvent): RhythmRenderEvent[] {
+  if (event.kind !== 'rest') return [event]
+  const result: RhythmRenderEvent[] = []
+  let start = event.start
+  let remaining = event.durationTicks
+  for (const durationTicks of [12, 6, 3]) {
+    while (remaining >= durationTicks) {
+      result.push({ ...event, start, durationTicks })
+      start += durationTicks
+      remaining -= durationTicks
+    }
+  }
+  if (remaining > 0) result.push({ ...event, start, durationTicks: remaining })
+  return result
 }
 
 function unit(label: string): RhythmUnit {
