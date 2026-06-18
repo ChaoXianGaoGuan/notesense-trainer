@@ -4,7 +4,7 @@ import type { IntervalMode, IntervalTimeLimit } from '../modules/interval-speed'
 import type { MelodyLength, MelodyPlaybackMode } from '../modules/melody'
 import type { RelativePitchSingDifficulty, RelativePitchSingDirection, RelativePitchSingOrder } from '../modules/relative-pitch-sing'
 import type { ListenPlaybackMode, SingleNoteDifficulty } from '../modules/single-note'
-import type { SyncopationBpm, SyncopationDifficulty, SyncopationMeter, SyncopationNotation } from '../modules/syncopation'
+import type { SyncopationBpm, SyncopationDifficulty, SyncopationMeter, SyncopationMetronomeMode, SyncopationNotation } from '../modules/syncopation'
 
 export type ModuleId =
   | 'solfege'
@@ -41,6 +41,7 @@ export type AppPreferences = {
     bpm: SyncopationBpm
     meter: SyncopationMeter
     notation: SyncopationNotation
+    metronomeMode: SyncopationMetronomeMode
     inputCalibrationMs: number
   }
   relativePitchSing: {
@@ -84,6 +85,7 @@ export const DEFAULT_PREFERENCES: AppPreferences = {
     bpm: 60,
     meter: '4/4',
     notation: 'jianpu',
+    metronomeMode: 'full',
     inputCalibrationMs: -140
   },
   relativePitchSing: {
@@ -140,6 +142,9 @@ export function normalizePreferences(preferences: AppPreferences): AppPreference
       notation: isSupportedSyncopationNotation(preferences.syncopation?.notation)
         ? preferences.syncopation.notation
         : DEFAULT_PREFERENCES.syncopation.notation,
+      metronomeMode: isSupportedSyncopationMetronomeMode(preferences.syncopation?.metronomeMode)
+        ? preferences.syncopation.metronomeMode
+        : DEFAULT_PREFERENCES.syncopation.metronomeMode,
       inputCalibrationMs: isSupportedSyncopationCalibration(preferences.syncopation?.inputCalibrationMs)
         ? preferences.syncopation.inputCalibrationMs
         : DEFAULT_PREFERENCES.syncopation.inputCalibrationMs
@@ -178,6 +183,10 @@ function isSupportedSyncopationMeter(value: unknown): value is SyncopationMeter 
 
 function isSupportedSyncopationNotation(value: unknown): value is SyncopationNotation {
   return value === 'jianpu' || value === 'staff'
+}
+
+function isSupportedSyncopationMetronomeMode(value: unknown): value is SyncopationMetronomeMode {
+  return value === 'full' || value === 'count-in'
 }
 
 function isSupportedSyncopationCalibration(value: unknown): value is number {

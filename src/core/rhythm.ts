@@ -4,6 +4,13 @@ export type RhythmDifficulty = 1 | 2 | 3 | 4 | 5 | 6 | 7
 export type RhythmBpm = 60 | 80 | 100
 export type RhythmMeter = '2/4' | '3/4' | '4/4'
 export type RhythmNotation = 'jianpu' | 'staff'
+export type RhythmMetronomeMode = 'full' | 'count-in'
+
+export type RhythmMetronomeEvent = {
+  timeMs: number
+  strong: boolean
+  phase: 'count-in' | 'practice'
+}
 
 export type RhythmTemplate = {
   id: string
@@ -183,6 +190,29 @@ export function getRhythmDurationMs(bpm: RhythmBpm, meter: RhythmMeter = '4/4'):
 
 export function getCountInDurationMs(bpm: RhythmBpm, meter: RhythmMeter = '4/4'): number {
   return getBarDurationMs(bpm, meter)
+}
+
+export function buildPracticeMetronomeEvents(
+  bpm: RhythmBpm,
+  meter: RhythmMeter,
+  mode: RhythmMetronomeMode
+): RhythmMetronomeEvent[] {
+  const beatsPerBar = getBeatsPerBar(meter)
+  const beatMs = 60000 / bpm
+  const countIn = Array.from({ length: beatsPerBar }, (_, beat) => ({
+    timeMs: beat * beatMs,
+    strong: beat === 0,
+    phase: 'count-in' as const
+  }))
+  if (mode === 'count-in') return countIn
+
+  const practiceStartMs = beatsPerBar * beatMs
+  const practice = Array.from({ length: beatsPerBar * BARS_PER_QUESTION }, (_, beat) => ({
+    timeMs: practiceStartMs + beat * beatMs,
+    strong: beat % beatsPerBar === 0,
+    phase: 'practice' as const
+  }))
+  return [...countIn, ...practice]
 }
 
 export function getAttackIndexes(cells: RhythmGrid): number[] {

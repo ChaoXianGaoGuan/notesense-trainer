@@ -10,6 +10,7 @@ import {
   type RhythmDifficulty,
   type RhythmEvaluation,
   type RhythmGrid,
+  type RhythmMetronomeMode,
   type RhythmMeter,
   type RhythmNotation
 } from '../core/rhythm'
@@ -19,6 +20,7 @@ export type SyncopationDifficulty = RhythmDifficulty
 export type SyncopationBpm = RhythmBpm
 export type SyncopationMeter = RhythmMeter
 export type SyncopationNotation = RhythmNotation
+export type SyncopationMetronomeMode = RhythmMetronomeMode
 
 export type SyncopationQuestion = {
   id: string
@@ -35,6 +37,7 @@ export type SyncopationSettings = {
   bpm: SyncopationBpm
   meter: SyncopationMeter
   notation: SyncopationNotation
+  metronomeMode: SyncopationMetronomeMode
   inputCalibrationMs: number
 }
 
@@ -104,9 +107,10 @@ export function checkSyncopationAnswer(
 export function getSyncopationStatsKey(
   difficulty: SyncopationDifficulty,
   bpm: SyncopationBpm,
-  meter: SyncopationMeter
+  meter: SyncopationMeter,
+  metronomeMode: SyncopationMetronomeMode
 ): StatsKey {
-  return `syncopation:${difficulty}:${bpm}:${meter}`
+  return `syncopation:${difficulty}:${bpm}:${meter}:${metronomeMode}`
 }
 
 export function getSyncopationBarDurationMs(bpm: SyncopationBpm, meter: SyncopationMeter): number {

@@ -1,5 +1,5 @@
-import type { RhythmBpm, RhythmGrid, RhythmMeter } from '../core/rhythm'
-import { getBeatsPerBar, getTickMs } from '../core/rhythm'
+import type { RhythmBpm, RhythmGrid, RhythmMeter, RhythmMetronomeMode } from '../core/rhythm'
+import { buildPracticeMetronomeEvents, getBeatsPerBar, getTickMs } from '../core/rhythm'
 
 let context: AudioContext | null = null
 
@@ -35,13 +35,12 @@ function scheduleTap(audioContext: AudioContext, startTime: number, variant: 'st
 }
 
 export const metronome = {
-  async playCountInAndBar(bpm: RhythmBpm, meter: RhythmMeter): Promise<void> {
+  async playCountInAndPractice(bpm: RhythmBpm, meter: RhythmMeter, mode: RhythmMetronomeMode): Promise<void> {
     const audioContext = getAudioContext()
     await audioContext.resume()
-    const beatSeconds = getTickMs(bpm) * 12 / 1000
     const startTime = audioContext.currentTime + 0.06
-    for (let beat = 0; beat < getBeatsPerBar(meter); beat += 1) {
-      scheduleClick(audioContext, startTime + beat * beatSeconds, beat === 0)
+    for (const event of buildPracticeMetronomeEvents(bpm, meter, mode)) {
+      scheduleClick(audioContext, startTime + event.timeMs / 1000, event.strong)
     }
   },
 

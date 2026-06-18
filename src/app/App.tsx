@@ -1083,7 +1083,7 @@ function SyncopationTrainer({
   recordAnswer: (key: StatsKey, correct: boolean) => void
   resetStats: (key: StatsKey) => void
 }) {
-  const statsKey = getSyncopationStatsKey(settings.difficulty, settings.bpm, settings.meter)
+  const statsKey = getSyncopationStatsKey(settings.difficulty, settings.bpm, settings.meter, settings.metronomeMode)
   const [question, setQuestion] = useState<SyncopationQuestion>(() => generateSyncopationQuestion(settings))
   const [phase, setPhase] = useState<SyncopationPhase>('idle')
   const [feedback, setFeedback] = useState<SyncopationResult | null>(null)
@@ -1128,7 +1128,7 @@ function SyncopationTrainer({
     setLastAttemptHitTimes([])
     setFeedback(null)
     setPhase('count-in')
-    void metronome.playCountInAndBar(settings.bpm, settings.meter)
+    void metronome.playCountInAndPractice(settings.bpm, settings.meter, settings.metronomeMode)
 
     const countInMs = getCountInDurationMs(settings.bpm, settings.meter)
     const barMs = getSyncopationBarDurationMs(settings.bpm, settings.meter)
@@ -1137,7 +1137,7 @@ function SyncopationTrainer({
       setPhase('playing')
     }, countInMs)
     finishTimeoutRef.current = window.setTimeout(finish, countInMs + barMs + 80)
-  }, [clearPlaybackTimers, clearRunTimers, finish, settings.bpm, settings.meter])
+  }, [clearPlaybackTimers, clearRunTimers, finish, settings.bpm, settings.meter, settings.metronomeMode])
 
   const playDemo = useCallback(() => {
     if (phase === 'count-in' || phase === 'playing') return
@@ -1244,7 +1244,7 @@ function SyncopationTrainer({
       clearRunTimers()
       clearPlaybackTimers()
     }
-  }, [clearPlaybackTimers, clearRunTimers, settings.bpm, settings.difficulty, settings.meter])
+  }, [clearPlaybackTimers, clearRunTimers, settings.bpm, settings.difficulty, settings.meter, settings.metronomeMode])
 
   useHotkeys(
     useMemo(
@@ -1308,6 +1308,15 @@ function SyncopationTrainer({
           ]}
           onChange={(value) => updateSettings({ ...settings, notation: value as AppPreferences['syncopation']['notation'] })}
         />
+        <SegmentedControl
+          label="节拍器"
+          value={settings.metronomeMode}
+          options={[
+            { value: 'full', label: '全程播放' },
+            { value: 'count-in', label: '仅预备拍' }
+          ]}
+          onChange={(value) => updateSettings({ ...settings, metronomeMode: value as AppPreferences['syncopation']['metronomeMode'] })}
+        />
         <label className="calibration-control">
           <span>输入校准</span>
           <input
@@ -1334,7 +1343,7 @@ function SyncopationTrainer({
       )}
       <div className="syncopation-actions">
         <button type="button" className="primary" disabled={phase === 'count-in' || phase === 'playing' || isPlaybackActive} onClick={start}>
-          {phase === 'feedback' ? '再来一次' : '开始'}
+          {phase === 'feedback' ? '再来一次' : '开始跟拍'}
         </button>
         <button type="button" disabled={!canPlayDemo} onClick={playDemo}>
           {playbackMode === 'demo' ? '示范中' : '正确节奏'}

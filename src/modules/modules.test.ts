@@ -10,6 +10,7 @@ import {
 import { framesToStableEvents } from '../audio/input-analyzer'
 import {
   buildComparisonEvents,
+  buildPracticeMetronomeEvents,
   buildRhythmDemoEvents,
   buildUserReplayEvents,
   cellsFromEvents,
@@ -188,7 +189,7 @@ describe('syncopation trainer', () => {
   })
 
   it('generates difficulty-specific questions and avoids immediate repeats', () => {
-    const settings = { difficulty: 1, bpm: 60, meter: '4/4', notation: 'jianpu', inputCalibrationMs: -140 } as const
+    const settings = { difficulty: 1, bpm: 60, meter: '4/4', notation: 'jianpu', metronomeMode: 'full', inputCalibrationMs: -140 } as const
     const first = generateSyncopationQuestion(settings)
     const second = generateSyncopationQuestion(settings, { previousQuestionKey: first.templateId })
     expect(getTemplatesForDifficulty(1, '4/4').map((template) => template.id)).toContain(first.templateId)
@@ -244,13 +245,13 @@ describe('syncopation trainer', () => {
   })
 
   it('converts bpm to target times on the tick timeline', () => {
-    const question = generateSyncopationQuestion({ difficulty: 1, bpm: 60, meter: '4/4', notation: 'jianpu', inputCalibrationMs: -140 })
+    const question = generateSyncopationQuestion({ difficulty: 1, bpm: 60, meter: '4/4', notation: 'jianpu', metronomeMode: 'full', inputCalibrationMs: -140 })
     const targets = getTargetTimesMs(question.cells, 60)
     expect(targets.every((time) => time % 1000 === 0)).toBe(true)
   })
 
   it('builds standard rhythm demo events for four bars', () => {
-    const question = generateSyncopationQuestion({ difficulty: 1, bpm: 60, meter: '2/4', notation: 'jianpu', inputCalibrationMs: -140 })
+    const question = generateSyncopationQuestion({ difficulty: 1, bpm: 60, meter: '2/4', notation: 'jianpu', metronomeMode: 'full', inputCalibrationMs: -140 })
     const events = buildRhythmDemoEvents(question.cells, 60)
     expect(events).toHaveLength(getTotalTicks('2/4'))
     expect(events[0]).toEqual({ index: 0, timeMs: 0, attack: question.cells[0] === 'attack' })
@@ -299,11 +300,22 @@ describe('syncopation trainer', () => {
   })
 
   it('returns answer feedback and stats key by difficulty, bpm, and meter', () => {
-    const question = generateSyncopationQuestion({ difficulty: 2, bpm: 80, meter: '3/4', notation: 'jianpu', inputCalibrationMs: -140 })
+    const question = generateSyncopationQuestion({ difficulty: 2, bpm: 80, meter: '3/4', notation: 'jianpu', metronomeMode: 'full', inputCalibrationMs: -140 })
     const result = checkSyncopationAnswer(question, 80, [])
     expect(result.correct).toBe(false)
     expect(result.explanation).toContain('漏拍')
-    expect(getSyncopationStatsKey(7, 100, '2/4')).toBe('syncopation:7:100:2/4')
+    expect(getSyncopationStatsKey(7, 100, '2/4', 'count-in')).toBe('syncopation:7:100:2/4:count-in')
+  })
+
+  it('builds count-in-only and full-practice metronome timelines without answer taps', () => {
+    const countInOnly = buildPracticeMetronomeEvents(60, '4/4', 'count-in')
+    expect(countInOnly).toHaveLength(4)
+    expect(countInOnly.every((event) => event.phase === 'count-in')).toBe(true)
+
+    const full = buildPracticeMetronomeEvents(60, '4/4', 'full')
+    expect(full).toHaveLength(20)
+    expect(full.filter((event) => event.phase === 'practice')).toHaveLength(16)
+    expect(full.filter((event) => event.phase === 'practice' && event.strong).map((event) => event.timeMs)).toEqual([4000, 8000, 12000, 16000])
   })
 
   it('applies input calibration to judgement and replay event timing', () => {
@@ -570,6 +582,7 @@ describe('state helpers', () => {
       bpm: 60,
       meter: '4/4',
       notation: 'jianpu',
+      metronomeMode: 'full',
       inputCalibrationMs: -140
     })
   })
@@ -587,14 +600,16 @@ describe('state helpers', () => {
   })
 
   it('normalizes syncopation difficulty and input calibration', () => {
-    expect(normalizePreferences({ ...DEFAULT_PREFERENCES, syncopation: { difficulty: 7, bpm: 60, meter: '2/4', notation: 'jianpu', inputCalibrationMs: 200 } }).syncopation).toMatchObject({
+    expect(normalizePreferences({ ...DEFAULT_PREFERENCES, syncopation: { difficulty: 7, bpm: 60, meter: '2/4', notation: 'jianpu', metronomeMode: 'count-in', inputCalibrationMs: 200 } }).syncopation).toMatchObject({
       difficulty: 7,
       meter: '2/4',
+      metronomeMode: 'count-in',
       inputCalibrationMs: 200
     })
-    expect(normalizePreferences({ ...DEFAULT_PREFERENCES, syncopation: { difficulty: 9, bpm: 60, meter: '6/8', notation: 'jianpu', inputCalibrationMs: 220 } as never }).syncopation).toMatchObject({
+    expect(normalizePreferences({ ...DEFAULT_PREFERENCES, syncopation: { difficulty: 9, bpm: 60, meter: '6/8', notation: 'jianpu', metronomeMode: 'invalid', inputCalibrationMs: 220 } as never }).syncopation).toMatchObject({
       difficulty: 1,
       meter: '4/4',
+      metronomeMode: 'full',
       inputCalibrationMs: -140
     })
   })
