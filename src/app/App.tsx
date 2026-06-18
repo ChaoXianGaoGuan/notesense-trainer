@@ -1417,7 +1417,7 @@ function JianpuRhythm({
               <text x={glyph.x} y={glyph.y} className={textClass} style={{ fontSize: layout.noteFontSize }}>
                 {glyph.kind === 'note' ? 'X' : '0'}
               </text>
-              {glyph.dotted && <text x={glyph.x + 17} y={glyph.y - 4} className="jianpu-dot">.</text>}
+              {glyph.dotted && <circle cx={glyph.x + 18} cy={glyph.y - 3} r="4.5" className="jianpu-dot" />}
             </g>
           )
         })}
