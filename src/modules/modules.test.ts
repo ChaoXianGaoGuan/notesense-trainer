@@ -15,6 +15,7 @@ import {
   buildUserReplayEvents,
   cellsFromEvents,
   evaluateRhythmHits,
+  getAttackIndexes,
   getTicksPerBar,
   getTargetTimesMs,
   getTemplatesForDifficulty,
@@ -176,7 +177,7 @@ describe('interval trainer', () => {
 describe('syncopation trainer', () => {
   it('generates four-bar templates for each meter and difficulty', () => {
     for (const meter of ['2/4', '3/4', '4/4'] as const) {
-      for (const difficulty of [1, 2, 3, 4, 5, 6, 7, 8] as const) {
+      for (const difficulty of [1, 2, 3, 4, 5, 6, 7, 8, 9] as const) {
         const templates = getTemplatesForDifficulty(difficulty, meter)
         expect(templates.length).toBeGreaterThan(0)
         for (const template of templates) {
@@ -197,6 +198,7 @@ describe('syncopation trainer', () => {
     expect(second.templateId).not.toBe(first.templateId)
     expect(generateSyncopationQuestion({ ...settings, difficulty: 7 }).description).toContain('三连音')
     expect(generateSyncopationQuestion({ ...settings, difficulty: 8 }).description).toContain('大切分')
+    expect(generateSyncopationQuestion({ ...settings, difficulty: 9 }).description).toContain('延音线训练')
   })
 
   it('guarantees the selected level material while mixing only current and earlier patterns', () => {
@@ -211,7 +213,9 @@ describe('syncopation trainer', () => {
       'back-dotted': 5,
       'small-syncopation': 6,
       'eighth-triplet': 7,
-      'large-syncopation': 8
+      'large-syncopation': 8,
+      'tie-across-beat': 9,
+      'tie-across-measure': 9
     }
     const focusPatterns: Record<number, string[]> = {
       1: ['quarter-note'],
@@ -221,10 +225,11 @@ describe('syncopation trainer', () => {
       5: ['front-dotted', 'back-dotted'],
       6: ['small-syncopation'],
       7: ['eighth-triplet'],
-      8: ['large-syncopation']
+      8: ['large-syncopation'],
+      9: ['tie-across-beat', 'tie-across-measure']
     }
 
-    for (const difficulty of [1, 2, 3, 4, 5, 6, 7, 8] as const) {
+    for (const difficulty of [1, 2, 3, 4, 5, 6, 7, 8, 9] as const) {
       for (const template of getTemplatesForDifficulty(difficulty, '4/4')) {
         expect(template.patternIds.every((id) => patternDifficulty[id] <= difficulty)).toBe(true)
         for (const focusPattern of focusPatterns[difficulty]) {
@@ -275,6 +280,48 @@ describe('syncopation trainer', () => {
     expect(tripletEvents.length).toBeGreaterThan(0)
     expect(tripletEvents.every((event) => event.start % 4 === 0)).toBe(true)
     expect(tripletEvents.every((event) => event.start % ticksPerBar < ticksPerBar)).toBe(true)
+  })
+
+  it('generates two to four separated ties with beat and measure coverage', () => {
+    for (const meter of ['2/4', '3/4', '4/4'] as const) {
+      const ticksPerBar = getTicksPerBar(meter)
+      for (const template of getTemplatesForDifficulty(9, meter)) {
+        expect(template.ties.length).toBeGreaterThanOrEqual(2)
+        expect(template.ties.length).toBeLessThanOrEqual(4)
+        expect(template.ties.some((tie) => tie.boundaryKind === 'beat')).toBe(true)
+        expect(template.ties.some((tie) => tie.boundaryKind === 'measure')).toBe(true)
+        expect(template.cells).toContain('rest')
+
+        const sorted = [...template.ties].sort((left, right) => left.startTick - right.startTick)
+        sorted.forEach((tie, index) => {
+          expect(tie.startTick).toBeGreaterThanOrEqual(0)
+          expect(tie.endTick).toBeLessThanOrEqual(getTotalTicks(meter))
+          expect(template.cells[tie.startTick]).toBe('attack')
+          expect(template.cells[tie.boundaryTick]).toBe('hold')
+          expect(template.cells.slice(tie.startTick, tie.endTick)).not.toContain('rest')
+          expect(getAttackIndexes(template.cells)).not.toContain(tie.boundaryTick)
+          if (tie.boundaryKind === 'measure') expect(tie.boundaryTick % ticksPerBar).toBe(0)
+          else {
+            expect(tie.boundaryTick % 12).toBe(0)
+            expect(tie.boundaryTick % ticksPerBar).not.toBe(0)
+          }
+          if (index > 0) expect(sorted[index - 1].endTick).toBeLessThan(tie.startTick)
+        })
+      }
+    }
+  })
+
+  it('renders cross-measure ties as complete or split arcs depending on row wrapping', () => {
+    const ticksPerBar = getTicksPerBar('4/4')
+    const cells = Array.from({ length: getTotalTicks('4/4') }, () => 'rest' as const) as Array<'attack' | 'hold' | 'rest'>
+    cells[ticksPerBar - 6] = 'attack'
+    cells.fill('hold', ticksPerBar - 5, ticksPerBar + 6)
+
+    const sameRow = layoutJianpuRhythm(cells, '4/4', null, { standard: null, user: null }, { measuresPerRow: 4 })
+    expect(sameRow.ties.map((tie) => tie.kind)).toContain('complete')
+
+    const wrapped = layoutJianpuRhythm(cells, '4/4', null, { standard: null, user: null }, { measuresPerRow: 1 })
+    expect(wrapped.ties.map((tie) => tie.kind)).toEqual(['outgoing', 'incoming'])
   })
 
   it('converts bpm to target times on the tick timeline', () => {
@@ -337,7 +384,7 @@ describe('syncopation trainer', () => {
     const result = checkSyncopationAnswer(question, 80, [])
     expect(result.correct).toBe(false)
     expect(result.explanation).toContain('漏拍')
-    expect(getSyncopationStatsKey(8, 100, '2/4', 'count-in')).toBe('syncopation:8:100:2/4:count-in')
+    expect(getSyncopationStatsKey(9, 100, '2/4', 'count-in')).toBe('syncopation:9:100:2/4:count-in')
   })
 
   it('builds count-in-only and full-practice metronome timelines without answer taps', () => {
@@ -359,7 +406,8 @@ describe('syncopation trainer', () => {
       description: 'test',
       meter: '4/4',
       cells: ['attack', ...Array(11).fill('hold')],
-      patternIds: ['quarter-note']
+      patternIds: ['quarter-note'],
+      ties: []
     } as const
 
     expect(checkSyncopationAnswer(question, 60, [140]).correct).toBe(false)
@@ -635,13 +683,13 @@ describe('state helpers', () => {
   })
 
   it('normalizes syncopation difficulty and input calibration', () => {
-    expect(normalizePreferences({ ...DEFAULT_PREFERENCES, syncopation: { difficulty: 8, bpm: 60, meter: '2/4', notation: 'jianpu', metronomeMode: 'count-in', inputCalibrationMs: 200 } }).syncopation).toMatchObject({
-      difficulty: 8,
+    expect(normalizePreferences({ ...DEFAULT_PREFERENCES, syncopation: { difficulty: 9, bpm: 60, meter: '2/4', notation: 'jianpu', metronomeMode: 'count-in', inputCalibrationMs: 200 } }).syncopation).toMatchObject({
+      difficulty: 9,
       meter: '2/4',
       metronomeMode: 'count-in',
       inputCalibrationMs: 200
     })
-    expect(normalizePreferences({ ...DEFAULT_PREFERENCES, syncopation: { difficulty: 9, bpm: 60, meter: '6/8', notation: 'jianpu', metronomeMode: 'invalid', inputCalibrationMs: 220 } as never }).syncopation).toMatchObject({
+    expect(normalizePreferences({ ...DEFAULT_PREFERENCES, syncopation: { difficulty: 10, bpm: 60, meter: '6/8', notation: 'jianpu', metronomeMode: 'invalid', inputCalibrationMs: 220 } as never }).syncopation).toMatchObject({
       difficulty: 1,
       meter: '4/4',
       metronomeMode: 'full',

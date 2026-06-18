@@ -12,7 +12,8 @@ import {
   type RhythmGrid,
   type RhythmMetronomeMode,
   type RhythmMeter,
-  type RhythmNotation
+  type RhythmNotation,
+  type RhythmTie
 } from '../core/rhythm'
 import { randomItem } from '../core/random'
 
@@ -30,6 +31,7 @@ export type SyncopationQuestion = {
   meter: SyncopationMeter
   cells: RhythmGrid
   patternIds: readonly string[]
+  ties: readonly RhythmTie[]
 }
 
 export type SyncopationSettings = {
@@ -57,7 +59,8 @@ export const SYNCOPATION_DIFFICULTY_LABELS: Record<SyncopationDifficulty, string
   5: '前附点/后附点',
   6: '小切分',
   7: '三连音',
-  8: '大切分'
+  8: '大切分',
+  9: '延音线训练'
 }
 
 export const SYNCOPATION_NOTATION_LABELS: Record<SyncopationNotation, string> = {
@@ -82,7 +85,8 @@ export function generateSyncopationQuestion(
     description: template.description,
     meter: template.meter,
     cells: template.cells,
-    patternIds: template.patternIds
+    patternIds: template.patternIds,
+    ties: template.ties
   }
 }
 

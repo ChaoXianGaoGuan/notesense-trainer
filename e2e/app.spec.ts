@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-test('each module renders and supports a basic answer flow', async ({ page }) => {
+test('each module renders and supports a basic answer flow', async ({ page }, testInfo) => {
   await page.goto('/')
   await page.evaluate(() => localStorage.clear())
   await page.reload()
@@ -58,6 +58,7 @@ test('each module renders and supports a basic answer flow', async ({ page }) =>
   await expect(syncopationModule.getByRole('button', { name: '小切分' })).toBeVisible()
   await expect(syncopationModule.getByRole('button', { name: '三连音' })).toBeVisible()
   await expect(syncopationModule.getByRole('button', { name: '大切分' })).toBeVisible()
+  await expect(syncopationModule.getByRole('button', { name: '延音线训练' })).toBeVisible()
   await expect(syncopationModule.getByRole('button', { name: '2/4' })).toBeVisible()
   await expect(syncopationModule.getByRole('button', { name: '3/4' })).toBeVisible()
   await expect(syncopationModule.getByRole('button', { name: '4/4' })).toHaveClass(/active/)
@@ -78,10 +79,20 @@ test('each module renders and supports a basic answer flow', async ({ page }) =>
   await syncopationModule.getByRole('button', { name: '大切分' }).click({ force: true })
   await expect(syncopationModule.getByText(/训练：.*大切分/)).toBeVisible()
   expect(await syncopationModule.locator('.jianpu-tie').count()).toBeGreaterThan(0)
+  await syncopationModule.getByRole('button', { name: '延音线训练' }).click({ force: true })
+  await expect(syncopationModule.getByText(/训练：.*延音线训练/)).toBeVisible()
+  expect(await syncopationModule.locator('.jianpu-tie').count()).toBeGreaterThan(0)
+  if (testInfo.project.name === 'mobile') {
+    expect(await syncopationModule.locator('.jianpu-tie.outgoing').count()).toBeGreaterThan(0)
+    expect(await syncopationModule.locator('.jianpu-tie.incoming').count()).toBeGreaterThan(0)
+  }
   await syncopationModule.getByRole('button', { name: '2/4' }).click({ force: true })
   await syncopationModule.getByRole('button', { name: '100 bpm' }).click({ force: true })
   await syncopationModule.getByRole('button', { name: '五线谱节奏' }).click({ force: true })
   await expect(syncopationModule.getByLabel('五线谱节奏型')).toBeVisible()
+  await expect(syncopationModule.locator('.staff-canvas')).toHaveAttribute('data-measure-count', '4')
+  expect(Number(await syncopationModule.locator('.staff-canvas').getAttribute('data-tie-count'))).toBeGreaterThan(0)
+  expect(Number(await syncopationModule.locator('.staff-canvas').getAttribute('data-beam-count'))).toBeGreaterThan(0)
   await syncopationModule.getByRole('button', { name: '开始跟拍', exact: true }).click()
   await page.waitForTimeout(2500)
   await page.keyboard.press('Space')

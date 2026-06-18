@@ -1,6 +1,6 @@
 export type RhythmCell = 'attack' | 'hold' | 'rest'
 export type RhythmGrid = readonly RhythmCell[]
-export type RhythmDifficulty = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
+export type RhythmDifficulty = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9
 export type RhythmBpm = 60 | 80 | 100
 export type RhythmMeter = '2/4' | '3/4' | '4/4'
 export type RhythmNotation = 'jianpu' | 'staff'
@@ -20,6 +20,17 @@ export type RhythmTemplate = {
   description: string
   cells: RhythmGrid
   patternIds: readonly string[]
+  ties: readonly RhythmTie[]
+}
+
+export type RhythmTie = {
+  id: string
+  boundaryKind: 'beat' | 'measure'
+  startTick: number
+  boundaryTick: number
+  endTick: number
+  leftDurationTicks: 3 | 6
+  rightDurationTicks: 3 | 6
 }
 
 export type RhythmHitStatus = 'hit' | 'early' | 'late' | 'missed'
@@ -83,7 +94,7 @@ const BARS_PER_QUESTION = 4
 
 export const RHYTHM_BPM_OPTIONS: RhythmBpm[] = [60, 80, 100]
 export const RHYTHM_METERS: RhythmMeter[] = ['2/4', '3/4', '4/4']
-export const RHYTHM_DIFFICULTIES: RhythmDifficulty[] = [1, 2, 3, 4, 5, 6, 7, 8]
+export const RHYTHM_DIFFICULTIES: RhythmDifficulty[] = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 export const RHYTHM_DIFFICULTY_DESCRIPTIONS: Record<RhythmDifficulty, string> = {
   1: '四分音符与四分休止符',
@@ -93,7 +104,8 @@ export const RHYTHM_DIFFICULTY_DESCRIPTIONS: Record<RhythmDifficulty, string> = 
   5: '前附点、后附点，可混入之前节奏',
   6: '小切分，可混入之前节奏',
   7: '三连音，可混入之前节奏',
-  8: '大切分，可混入之前节奏'
+  8: '大切分，可混入之前节奏',
+  9: '延音线训练，可混入之前节奏'
 }
 
 const UNITS: RhythmUnit[] = [
@@ -131,7 +143,8 @@ const FOCUS_PATTERN_IDS: Record<RhythmDifficulty, readonly string[]> = {
   5: ['front-dotted', 'back-dotted'],
   6: ['small-syncopation'],
   7: ['eighth-triplet'],
-  8: ['large-syncopation']
+  8: ['large-syncopation'],
+  9: []
 }
 
 export function getTicksPerBeat(): number {
@@ -155,7 +168,9 @@ export function getTemplatesForDifficulty(difficulty: RhythmDifficulty, meter: R
 }
 
 export function buildRhythmTemplate(difficulty: RhythmDifficulty, meter: RhythmMeter, variant = 0): RhythmTemplate {
-  const { cells, patternIds } = buildCellsForDifficulty(difficulty, meter, variant)
+  const { cells, patternIds, ties } = difficulty === 9
+    ? buildTieTrainingCells(meter, variant)
+    : { ...buildCellsForDifficulty(difficulty, meter, variant), ties: [] }
   const label = difficulty === 7 ? '三连音' : RHYTHM_DIFFICULTY_DESCRIPTIONS[difficulty].split('，')[0]
   return {
     id: `${meter}-${difficulty}-${variant}-${cells.join('')}`,
@@ -164,7 +179,8 @@ export function buildRhythmTemplate(difficulty: RhythmDifficulty, meter: RhythmM
     label,
     description: `${meter} · 四小节 · ${RHYTHM_DIFFICULTY_DESCRIPTIONS[difficulty]}`,
     cells,
-    patternIds
+    patternIds,
+    ties
   }
 }
 
@@ -433,6 +449,101 @@ function buildCellsForDifficulty(
     }
   }
   return { cells: trimmed, patternIds }
+}
+
+function buildTieTrainingCells(
+  meter: RhythmMeter,
+  variant: number
+): { cells: RhythmCell[]; patternIds: string[]; ties: RhythmTie[] } {
+  const base = buildCellsForDifficulty(8, meter, variant)
+  const cells = [...base.cells]
+  const ticksPerBar = getTicksPerBar(meter)
+  const totalTicks = getTotalTicks(meter)
+  const tieCount = 2 + (variant % 3)
+  const measureBoundaries = Array.from({ length: BARS_PER_QUESTION - 1 }, (_, index) => (index + 1) * ticksPerBar)
+  const beatBoundaries = Array.from(
+    { length: totalTicks / TICKS_PER_QUARTER - 1 },
+    (_, index) => (index + 1) * TICKS_PER_QUARTER
+  ).filter((boundary) => boundary % ticksPerBar !== 0)
+  const ties: RhythmTie[] = []
+
+  addFirstAvailableTie(ties, rotate(measureBoundaries, variant), 'measure', variant)
+  addFirstAvailableTie(ties, rotate(beatBoundaries, variant * 2 + 1), 'beat', variant + 1)
+
+  const extraCandidates = rotate([
+    ...measureBoundaries.map((boundary) => ({ boundary, kind: 'measure' as const })),
+    ...beatBoundaries.map((boundary) => ({ boundary, kind: 'beat' as const }))
+  ], variant * 3 + 1)
+  for (let index = 0; index < extraCandidates.length && ties.length < tieCount; index += 1) {
+    const candidate = extraCandidates[index]
+    const tie = createTie(candidate.boundary, candidate.kind, variant + index + ties.length)
+    if (isTieSeparated(tie, ties)) ties.push(tie)
+  }
+
+  if (!ties.some((tie) => tie.boundaryKind === 'beat') || !ties.some((tie) => tie.boundaryKind === 'measure')) {
+    throw new Error('Unable to generate required tie boundaries')
+  }
+
+  for (const tie of ties) {
+    cells[tie.startTick] = 'attack'
+    for (let tick = tie.startTick + 1; tick < tie.endTick; tick += 1) cells[tick] = 'hold'
+  }
+  ensureRestOutsideTies(cells, ties)
+
+  return {
+    cells,
+    patternIds: [...base.patternIds, ...ties.map((tie) => `tie-across-${tie.boundaryKind}`)],
+    ties
+  }
+}
+
+function addFirstAvailableTie(
+  ties: RhythmTie[],
+  boundaries: number[],
+  kind: RhythmTie['boundaryKind'],
+  seed: number
+): void {
+  for (let index = 0; index < boundaries.length; index += 1) {
+    const tie = createTie(boundaries[index], kind, seed + index)
+    if (!isTieSeparated(tie, ties)) continue
+    ties.push(tie)
+    return
+  }
+}
+
+function createTie(boundaryTick: number, boundaryKind: RhythmTie['boundaryKind'], seed: number): RhythmTie {
+  const leftDurationTicks = (seed % 2 === 0 ? 6 : 3) as 3 | 6
+  const rightDurationTicks = (Math.floor(seed / 2) % 2 === 0 ? 6 : 3) as 3 | 6
+  return {
+    id: `tie-${boundaryKind}-${boundaryTick}-${leftDurationTicks}-${rightDurationTicks}`,
+    boundaryKind,
+    startTick: boundaryTick - leftDurationTicks,
+    boundaryTick,
+    endTick: boundaryTick + rightDurationTicks,
+    leftDurationTicks,
+    rightDurationTicks
+  }
+}
+
+function isTieSeparated(candidate: RhythmTie, ties: RhythmTie[]): boolean {
+  return ties.every((tie) => candidate.endTick < tie.startTick || candidate.startTick > tie.endTick)
+}
+
+function ensureRestOutsideTies(cells: RhythmCell[], ties: RhythmTie[]): void {
+  if (cells.includes('rest')) return
+  for (let start = 0; start <= cells.length - TICKS_PER_QUARTER; start += TICKS_PER_QUARTER) {
+    const end = start + TICKS_PER_QUARTER
+    if (ties.some((tie) => start < tie.endTick && end > tie.startTick)) continue
+    cells.fill('rest', start, end)
+    return
+  }
+  throw new Error('Unable to reserve a rest outside ties')
+}
+
+function rotate<T>(values: T[], offset: number): T[] {
+  if (values.length === 0) return []
+  const index = ((offset % values.length) + values.length) % values.length
+  return [...values.slice(index), ...values.slice(0, index)]
 }
 
 function findPattern(id: string): RhythmPattern {

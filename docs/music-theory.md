@@ -97,8 +97,11 @@ The cumulative levels are:
 6  small syncopation: sixteenth + eighth + sixteenth (one beat)
 7  eighth-note triplets
 8  large syncopation: eighth + quarter + eighth (two beats)
+9  tie training: sustained notes across beat and measure boundaries
 ```
 
 The middle quarter note of large syncopation begins off the beat and crosses the next beat boundary. In teaching notation it is rendered as two tied eighth notes so the beat boundary remains visible. The second displayed eighth is only a continuation: it does not create another attack or another expected user tap.
 
 An eighth-note triplet is displayed as one group: an arc spans the first through third notes and a single `3` appears at the center of the arc. It is not labeled with a separate `3` over every note.
+
+Tie-training questions contain two to four non-overlapping ties and guarantee both a beat-boundary tie and a measure-boundary tie. A tied continuation is displayed as a note but remains part of the original semantic note, so it does not add another attack or expected tap. Ties never connect to rests or continue beyond the four-measure question.

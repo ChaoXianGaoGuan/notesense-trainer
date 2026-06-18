@@ -1403,7 +1403,7 @@ function JianpuRhythm({
           <path
             key={tie.id}
             d={`M ${tie.x1} ${tie.y} Q ${(tie.x1 + tie.x2) / 2} ${tie.controlY} ${tie.x2} ${tie.y}`}
-            className="jianpu-tie"
+            className={`jianpu-tie ${tie.kind}`}
           />
         ))}
         {layout.tuplets.map((tuplet) => (
@@ -1493,50 +1493,88 @@ function StaffRhythm({
     let cancelled = false
     async function renderStaff() {
       if (!containerRef.current) return
-      const { Formatter, Renderer, Stave, StaveNote, StaveTie, Tuplet, Voice } = await import('vexflow')
+      const { Beam, Formatter, Renderer, Stave, StaveNote, StaveTie, Tuplet, Voice } = await import('vexflow')
       if (cancelled || !containerRef.current) return
       containerRef.current.innerHTML = ''
       const renderer = new Renderer(containerRef.current, Renderer.Backends.SVG)
       renderer.resize(1100, 180)
       const context = renderer.getContext()
-      const stave = new Stave(10, 28, 1040)
-      stave.addClef('percussion').addTimeSignature(meter)
-      stave.setContext(context).draw()
-
       const renderEvents = splitRhythmEventsAtBeatBoundaries(rhythmToNotationEvents(cells))
-      const notes = renderEvents.map((event) => {
-        const duration = event.durationTicks === 3 ? '16' : event.durationTicks === 4 ? '8' : event.durationTicks === 6 ? '8' : event.durationTicks === 9 ? '8d' : event.durationTicks === 12 ? 'q' : 'q'
-        return new StaveNote({
-          keys: ['b/4'],
-          duration: event.kind === 'rest' ? `${duration}r` : duration,
-          clef: 'percussion'
-        })
-      })
+      const ticksPerBar = getTicksPerBar(meter)
+      const beatsPerBar = ticksPerBar / 12
+      const staveWidth = 270
+      const noteEntries: Array<{ event: (typeof renderEvents)[number]; note: InstanceType<typeof StaveNote> }> = []
       const tuplets = []
-      for (let index = 0; index <= renderEvents.length - 3; index += 1) {
-        if (!renderEvents.slice(index, index + 3).every((event) => event.tuplet === 3)) continue
-        tuplets.push(new Tuplet(notes.slice(index, index + 3), {
-          numNotes: 3,
-          notesOccupied: 2,
-          bracketed: true,
-          ratioed: false
-        }))
-        index += 2
+      const beams: InstanceType<typeof Beam>[] = []
+
+      for (let measureIndex = 0; measureIndex < 4; measureIndex += 1) {
+        const measureStart = measureIndex * ticksPerBar
+        const measureEnd = measureStart + ticksPerBar
+        const stave = new Stave(10 + measureIndex * staveWidth, 28, staveWidth)
+        if (measureIndex === 0) stave.addClef('percussion').addTimeSignature(meter)
+        stave.setContext(context).draw()
+
+        const measureEvents = renderEvents.filter((event) => event.start >= measureStart && event.start < measureEnd)
+        const notes = measureEvents.map((event) => {
+          const duration = event.durationTicks === 3 ? '16' : event.durationTicks === 4 ? '8' : event.durationTicks === 6 ? '8' : event.durationTicks === 9 ? '8d' : event.durationTicks === 12 ? 'q' : 'q'
+          return new StaveNote({
+            keys: ['b/4'],
+            duration: event.kind === 'rest' ? `${duration}r` : duration,
+            clef: 'percussion'
+          })
+        })
+        let beamGroup: InstanceType<typeof StaveNote>[] = []
+        let beamBeat = -1
+        const finishBeamGroup = () => {
+          if (beamGroup.length >= 2) beams.push(new Beam(beamGroup))
+          beamGroup = []
+        }
+        measureEvents.forEach((event, index) => {
+          const beat = Math.floor((event.start - measureStart) / 12)
+          const beamable = event.kind === 'note' && event.durationTicks < 12
+          if (!beamable || beat !== beamBeat) finishBeamGroup()
+          if (!beamable) {
+            beamBeat = -1
+            return
+          }
+          beamBeat = beat
+          beamGroup.push(notes[index])
+        })
+        finishBeamGroup()
+        for (let index = 0; index <= measureEvents.length - 3; index += 1) {
+          if (!measureEvents.slice(index, index + 3).every((event) => event.tuplet === 3)) continue
+          tuplets.push(new Tuplet(notes.slice(index, index + 3), {
+            numNotes: 3,
+            notesOccupied: 2,
+            bracketed: true,
+            ratioed: false
+          }))
+          index += 2
+        }
+        const voice = new Voice({ numBeats: beatsPerBar, beatValue: 4 }).setStrict(false)
+        voice.addTickables(notes)
+        new Formatter().joinVoices([voice]).formatToStave([voice], stave)
+        voice.draw(context, stave)
+        measureEvents.forEach((event, index) => noteEntries.push({ event, note: notes[index] }))
       }
-      const voice = new Voice({ numBeats: cells.length / 12, beatValue: 4 }).setStrict(false)
-      voice.addTickables(notes)
-      new Formatter().joinVoices([voice]).format([voice], 960)
-      voice.draw(context, stave)
-      renderEvents.forEach((event, index) => {
-        if (!event.tieStart || !notes[index + 1]) return
+
+      let renderedTieCount = 0
+      noteEntries.forEach(({ event, note }, index) => {
+        const next = noteEntries.slice(index + 1).find((candidate) => candidate.event.sourceStart === event.sourceStart && candidate.event.tieEnd)
+        if (!event.tieStart || !next) return
         new StaveTie({
-          firstNote: notes[index],
-          lastNote: notes[index + 1],
+          firstNote: note,
+          lastNote: next.note,
           firstIndexes: [0],
           lastIndexes: [0]
         }).setContext(context).draw()
+        renderedTieCount += 1
       })
+      beams.forEach((beam) => beam.setContext(context).draw())
       tuplets.forEach((tuplet) => tuplet.setContext(context).draw())
+      containerRef.current.dataset.measureCount = '4'
+      containerRef.current.dataset.tieCount = String(renderedTieCount)
+      containerRef.current.dataset.beamCount = String(beams.length)
     }
 
     void renderStaff()

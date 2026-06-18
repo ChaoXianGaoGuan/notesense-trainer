@@ -30,6 +30,7 @@ export type JianpuRhythmGlyph = {
 
 export type JianpuTie = {
   id: string
+  kind: 'complete' | 'outgoing' | 'incoming'
   x1: number
   x2: number
   y: number
@@ -130,6 +131,7 @@ export function layoutJianpuRhythm(
   const glyphs: JianpuRhythmGlyph[] = []
   const guideLines: JianpuGuideLine[] = []
   const measureLabels: JianpuMeasureLabel[] = []
+  const renderEvents = splitRhythmEventsAtBeatBoundaries(rhythmToNotationEvents(cells), ticksPerBeat)
 
   for (let measureIndex = 0; measureIndex < BARS_PER_QUESTION; measureIndex += 1) {
     const row = Math.floor(measureIndex / options.measuresPerRow)
@@ -138,8 +140,8 @@ export function layoutJianpuRhythm(
     const rowY = TOP + row * (ROW_HEIGHT + ROW_GAP)
     const noteY = rowY + NOTE_Y_OFFSET
     const measureStartTick = measureIndex * ticksPerBar
-    const measureCells = cells.slice(measureStartTick, measureStartTick + ticksPerBar)
-    const events = splitRhythmEventsAtBeatBoundaries(rhythmToNotationEvents(measureCells), ticksPerBeat)
+    const measureEndTick = measureStartTick + ticksPerBar
+    const events = renderEvents.filter((event) => event.start >= measureStartTick && event.start < measureEndTick)
     const beatWidth = measureWidth / beatsPerBar
 
     guideLines.push({
@@ -172,16 +174,16 @@ export function layoutJianpuRhythm(
 
     const eventsByBeat = Array.from({ length: beatsPerBar }, (_, beatIndex) => ({
       beatIndex,
-      events: events.filter((event) => Math.floor(event.start / ticksPerBeat) === beatIndex)
+      events: events.filter((event) => Math.floor((event.start - measureStartTick) / ticksPerBeat) === beatIndex)
     }))
 
     for (const beat of eventsByBeat) {
       const beatStartX = measureX + beat.beatIndex * beatWidth
       const centers = distributeCenters(beatStartX, beatWidth, beat.events.length)
       beat.events.forEach((event, eventIndex) => {
-        const absoluteStart = measureStartTick + event.start
+        const absoluteStart = event.start
         glyphs.push({
-          id: `${measureIndex}-${event.start}-${event.kind}`,
+          id: `${measureIndex}-${absoluteStart}-${event.kind}`,
           kind: event.kind,
           startTick: absoluteStart,
           durationTicks: event.durationTicks,
@@ -191,7 +193,7 @@ export function layoutJianpuRhythm(
           underlineLevel: getUnderlineLevel(event.durationTicks),
           dotted: event.durationTicks === 9,
           tuplet: event.tuplet,
-          sourceStartTick: measureStartTick + event.sourceStart,
+          sourceStartTick: event.sourceStart,
           tieStart: event.tieStart,
           tieEnd: event.tieEnd,
           state: getGlyphState(absoluteStart, event.durationTicks, event.kind, evaluation, active)
@@ -207,7 +209,7 @@ export function layoutJianpuRhythm(
     noteFontSize: options.measuresPerRow === 1 ? 28 : options.measuresPerRow === 2 ? 26 : 24,
     glyphs,
     underlines: buildUnderlineSegments(beatGroups, options.measuresPerRow),
-    ties: buildTies(glyphs),
+    ties: buildTies(glyphs, width),
     tuplets: buildTuplets(beatGroups),
     guideLines,
     measureLabels
@@ -220,7 +222,7 @@ function distributeCenters(startX: number, beatWidth: number, count: number): nu
   return Array.from({ length: count }, (_, index) => startX + slot * (index + 0.5))
 }
 
-function buildTies(glyphs: JianpuRhythmGlyph[]): JianpuTie[] {
+function buildTies(glyphs: JianpuRhythmGlyph[], width: number): JianpuTie[] {
   const groups = new Map<number, JianpuRhythmGlyph[]>()
   for (const glyph of glyphs) {
     if (!glyph.tieStart && !glyph.tieEnd) continue
@@ -231,16 +233,37 @@ function buildTies(glyphs: JianpuRhythmGlyph[]): JianpuTie[] {
 
   return [...groups.entries()].flatMap(([sourceStartTick, group]) => {
     const parts = group.sort((left, right) => left.startTick - right.startTick)
-    return parts.slice(0, -1).flatMap((left, index) => {
+    return parts.slice(0, -1).flatMap<JianpuTie>((left, index) => {
       const right = parts[index + 1]
-      if (!left.tieStart || !right.tieEnd || left.y !== right.y) return []
-      return [{
-        id: `tie-${sourceStartTick}-${index}`,
-        x1: left.x + 10,
-        x2: right.x - 10,
-        y: left.y - 18,
-        controlY: left.y - 34
-      }]
+      if (!left.tieStart || !right.tieEnd) return []
+      if (left.y === right.y) {
+        return [{
+          id: `tie-${sourceStartTick}-${index}`,
+          kind: 'complete' as const,
+          x1: left.x + 10,
+          x2: right.x - 10,
+          y: left.y - 18,
+          controlY: left.y - 34
+        }]
+      }
+      return [
+        {
+          id: `tie-${sourceStartTick}-${index}-outgoing`,
+          kind: 'outgoing' as const,
+          x1: left.x + 10,
+          x2: width - RIGHT - 4,
+          y: left.y - 18,
+          controlY: left.y - 34
+        },
+        {
+          id: `tie-${sourceStartTick}-${index}-incoming`,
+          kind: 'incoming' as const,
+          x1: LEFT + 4,
+          x2: right.x - 10,
+          y: right.y - 18,
+          controlY: right.y - 34
+        }
+      ]
     })
   })
 }
